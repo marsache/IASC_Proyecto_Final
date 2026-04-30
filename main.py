@@ -82,23 +82,31 @@ def main():
 
     settings = getSettings()
 
-    dataset_path = input("CSV path: ")
+    dataset_found = False
+    
+    while (not dataset_found):
 
-    dataset_path = settings.base_dataset_path + dataset_path
+        dataset_path = input("CSV path: ")
 
-    if(not os.path.exists(dataset_path)):
-        print("Path not found")
-        return
+        dataset_path = settings.base_dataset_path + dataset_path
+
+        dataset_found = os.path.exists(dataset_path)
+        if(not dataset_found):
+            print("Path not found")
 
     dataset = pd.read_csv(dataset_path)
 
     print(f"Dataset head:\n{dataset.head()}")
 
-    target = input("Target feature: ") #"over_limit"
+    target_found = False
+    
+    while (not target_found):
 
-    if(not target in dataset):
-        print("Feature not found")
-        return
+        target = input("Target feature: ") #"over_limit"
+        
+        target_found = target in dataset
+        if(not target_found):
+            print("Feature not found")
 
     x_train, x_test, y_train, y_test = preprocess_dataset(target)
 
