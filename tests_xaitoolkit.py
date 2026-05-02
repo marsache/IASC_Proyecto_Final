@@ -1,9 +1,14 @@
+import os
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, mean_squared_error, r2_score
 
+# ours
+from config import getSettings 
 import tools.XAIToolkit as xai
+from utils.dataset_cleaning import preprocess_dataset
+from xai_agent import setup_xai_agent
 
 # --- IMPORTACIONES DE LANGCHAIN ---
 from langchain_core.tools import StructuredTool
@@ -11,31 +16,91 @@ from langchain_community.chat_models import ChatOllama
 from langchain_classic.agents import AgentExecutor, create_structured_chat_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+def generate_model_info(model, X_test: np.ndarray, y_test: np.ndarray, task_type: str = "classification") -> str:
+    """
+    Evalúa el modelo entrenado y genera un resumen en texto plano
+    con su nombre y métricas clave para inyectar en el LLM.
+    """
+    # 1. Extraer el nombre del algoritmo automáticamente
+    # Ejemplo: pasará de ser un objeto a un string como "RandomForestClassifier" o "LogisticRegression"
+    model_name = type(model).__name__
+    
+    # 2. Generar predicciones sobre el conjunto de prueba
+    y_pred = model.predict(X_test)
+    
+    # 3. Construir el texto de salida
+    info_lines = [f"Tipo de Modelo Base: {model_name}"]
+    info_lines.append("Métricas de Rendimiento (Evaluación en Test):")
+    
+    # 4. Calcular métricas según el tipo de problema
+    if task_type == "classification":
+        acc = accuracy_score(y_test, y_pred)
+        # Usamos average='weighted' por si hay desbalanceo multiclase
+        f1 = f1_score(y_test, y_pred, average='weighted')
+        prec = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+        rec = recall_score(y_test, y_pred, average='weighted')
+        
+        info_lines.append(f"- Exactitud (Accuracy): {acc:.2f} (Rango 0-1, donde 1 es perfecto)")
+        info_lines.append(f"- F1-Score (Ponderado): {f1:.2f}")
+        info_lines.append(f"- Precisión: {prec:.2f}")
+        info_lines.append(f"- Recall: {rec:.2f}")
+        
+    elif task_type == "regression":
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+        
+        info_lines.append(f"- Error Cuadrático Medio (MSE): {mse:.2f}")
+        info_lines.append(f"- R2 Score: {r2:.2f} (Rango de 0-1, donde 1 es ajuste perfecto)")
+        
+    else:
+        info_lines.append("- Tipo de tarea no reconocida para calcular métricas.")
+
+    # Convertimos la lista en un solo string con saltos de línea
+    return "\n".join(info_lines)
+
 # ==========================================
 # 2. CONFIGURACIÓN DE DATOS Y MODELO MOCK
 # ==========================================
 def preparar_entorno():
     print("📊 Generando datos simulados y entrenando modelo...")
     # Dataset simulado de aprobación de crédito
-    np.random.seed(42)
-    n = 500
-    df = pd.DataFrame({
-        'edad': np.random.randint(18, 70, n),
-        'ingresos': np.random.randint(15000, 80000, n),
-        'deuda_actual': np.random.randint(0, 30000, n),
-        'historial_impagos': np.random.randint(0, 3, n)
-    })
-    # Lógica inventada: aprueban si tienen buenos ingresos, poca deuda y sin impagos
-    prob_aprobacion = (df['ingresos'] / 80000) - (df['deuda_actual'] / 30000) - (df['historial_impagos'] * 0.3)
-    df['aprobado'] = (prob_aprobacion > 0).astype(int)
 
-    X = df.drop('aprobado', axis=1)
-    y = df['aprobado']
+    dataset_found = False
+    dataset_name = ""
+    while (not dataset_found):
+
+        dataset_path = input("CSV path: ")
+        dataset_name = dataset_path
+        dataset_path = getSettings().base_dataset_path + dataset_path
+
+        dataset_found = os.path.exists(dataset_path)
+        if(not dataset_found):
+            print("Path not found")
+
+    dataset = pd.read_csv(dataset_path)
+
+    print(f"Dataset head:\n{dataset.head()}")
+
+    target_found = False
+    
+    while (not target_found):
+
+        target = input("Target feature: ") #"over_limit"
+        
+        target_found = target in dataset
+        if(not target_found):
+            print("Feature not found")
+
+    x_train, x_test, y_train, y_test, dataset_metadata = preprocess_dataset(dataset, target)
     
     model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42)
-    model.fit(X, y)
-    
-    return model, X
+    model.fit(x_train, y_train)
+
+    model_info = generate_model_info(model, x_test, y_test, task_type="classification")
+
+    labels = list(dataset.columns.values)
+    labels.remove(target)
+    return model, x_train, x_test, y_train, y_test, labels, dataset_metadata, dataset_name, model_info
 
 # ==========================================
 # 3. EJECUCIÓN SIN LLM (Prueba Unitaria)
@@ -55,89 +120,46 @@ def test_sin_llm(toolkit, cliente_ejemplo):
 # ==========================================
 # 4. EJECUCIÓN CON LLM (LangChain + Ollama)
 # ==========================================
-def test_con_llm(toolkit, cliente_ejemplo):
+def test_con_llm(toolkit, cliente_ejemplo, dataset_metadata, dataset_name, model_info):
     print("\n" + "="*50)
     print("🤖 MODO 2: EJECUCIÓN CON LLM (Ollama + LangChain)")
     print("="*50)
     
-    # 4.1. Adaptación a LangChain Tools
-    tool_global = StructuredTool.from_function(
-        func=toolkit.tool_shap_explain_global,
-        name="explicar_modelo_global",
-        description="Útil para explicar qué variables importan más en todo el modelo general."
-    )
-    
-    tool_local = StructuredTool.from_function(
-        func=toolkit.tool_shap_explain_local_prediction,
-        name="explicar_prediccion_local",
-        description="Útil para explicar por qué se tomó una decisión para un cliente específico."
-    )
-    
-    tools = [tool_global, tool_local]
-
-    tool_names = [tool_global.name, tool_local.name]
-
-    # 4.2. Configurar LLM local (Ollama). Usa 'llama3' o el modelo que tengas descargado
-    # Asegúrate de tener Ollama corriendo en segundo plano: `ollama run llama3`
-    llm = ChatOllama(model="llama3", temperature=0)
-
-    system_prompt = """Eres un asistente experto en Inteligencia Artificial Explicable.
-    Tienes acceso a las siguientes herramientas:
-    {tool_names}
-    {tools}
-
-    Para usar una herramienta, debes responder EXACTAMENTE con un bloque de código JSON con este formato:
-    ```json
-    {{
-      "action": "nombre_de_la_herramienta",
-      "action_input": {{ "parametro": "valor" }}
-    }}
-    ```
-
-    Si ya tienes la respuesta final para el usuario, responde con:
-    ```json
-    {{
-      "action": "Final Answer",
-      "action_input": "Tu explicación final aquí en lenguaje natural"
-    }}
-    ```
-    """
-
-    # 4.3. Crear el Prompt y el Agente
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "Pregunta: {input}\n\nHistorial de acciones y observaciones (Scratchpad):\n{agent_scratchpad}"),
-    ])
-    # Nota: Llama3 mediante ChatOllama soporta tool calling en versiones recientes de Langchain
-    agent = create_structured_chat_agent(llm=llm, tools=tools, prompt=prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+    agent_executor = setup_xai_agent(dataset_metadata_json=dataset_metadata, model_info=model_info, dataset_name=dataset_name, toolkit=toolkit)
 
     # 4.4. Probar las consultas
-    print("\n🗣️ Usuario: ¿Cómo funciona el modelo en general? ¿Cuáles son las variables clave?")
+    print("\nUsuario: ¿Cómo funciona el modelo en general? ¿Cuáles son las variables clave?")
     response_global = agent_executor.invoke({"input": "¿Cómo funciona el modelo en general? ¿Cuáles son las variables clave?"})
-    print("\n💡 Respuesta LLM:\n", response_global['output'])
+    print("\nRespuesta LLM:\n", response_global['output'])
 
-    print(f"\n🗣️ Usuario: Explícame la predicción para este cliente: {cliente_ejemplo}")
+    print(f"\nUsuario: Explícame la predicción para este cliente: {cliente_ejemplo}")
     response_local = agent_executor.invoke({
         "input": f"Explícame en un lenguaje de negocio por qué el modelo ha tomado esta decisión para el siguiente cliente: {cliente_ejemplo}"
     })
-    print("\n💡 Respuesta LLM:\n", response_local['output'])
+    print("\nRespuesta LLM:\n", response_local['output'])
 
 # ==========================================
 # BLOQUE PRINCIPAL
 # ==========================================
 if __name__ == "__main__":
     # 1. Preparar datos y modelo
-    modelo_rf, datos_fondo = preparar_entorno()
+    modelo_rf, x_train, x_test, y_train, y_test, labels, dataset_metadata, dataset_name, model_info = preparar_entorno()
     
+    print(x_train.shape)
     # 2. Inicializar Toolkit
-    toolkit = xai.XAIToolkit(model=modelo_rf, background_data=datos_fondo)
+    toolkit = xai.XAIToolkit(model=modelo_rf, x_test=x_test, labels=labels)
     
-    # Cliente de prueba: Joven, pocos ingresos, mucha deuda y 2 impagos (debería ser rechazado)
-    cliente_test = {'edad': 25, 'ingresos': 18000, 'deuda_actual': 25000, 'historial_impagos': 2}
-    
+    sample = x_test[0]
+
+    i = 0
+    sample_test = {}
+    for label in labels:
+        sample_test[label] = sample[i]
+        i += 1
+
+    # print(sample_test)
     # 3. Probar funciones crudas
-    test_sin_llm(toolkit, cliente_test)
+    # test_sin_llm(toolkit, sample_test)
     
     # 4. Probar agente (Descomenta la siguiente línea si tienes Ollama instalado y corriendo)
-    # test_con_llm(toolkit, cliente_test)
+    test_con_llm(toolkit, sample_test, dataset_metadata, dataset_name, model_info)

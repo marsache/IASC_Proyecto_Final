@@ -119,8 +119,6 @@ def main():
         {y_test.shape}
 """)
 
-
-
     # llm = ChatOllama(model = settings.ollama_model, temperature = settings.temperature)
 
     # system_prompt = ""

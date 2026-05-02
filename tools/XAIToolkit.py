@@ -5,11 +5,12 @@ import pandas as pd
 import numpy as np
 
 class XAIToolkit:
-    def __init__(self, model, background_data=None):
+    def __init__(self, model, x_test, labels):
         # La parte pesada se ejecuta solo UNA vez al arrancar la app
         self.model = model
-        self.explainer = shap.Explainer(self.model, background_data)
-        self.background_data = background_data
+        self.explainer = shap.Explainer(self.model)
+        self.x_test = x_test
+        self.labels = labels
 
     def tool_shap_explain_global(self, top_k: int = 5) -> str:
         """
@@ -25,17 +26,8 @@ class XAIToolkit:
             str: Un JSON en formato string con la importancia global de las variables y su dirección de impacto.
         """
         try:
-            if self.background_data is None:
-                return json.dumps({"error": "No hay datos de fondo (background_data) configurados para calcular el SHAP global."})
-            
-            # Asegurarnos de que los datos de fondo son un DataFrame
-            if isinstance(self.background_data, pd.DataFrame):
-                df_bg = self.background_data
-            else:
-                df_bg = pd.DataFrame(self.background_data)
-                
             # Calcular valores SHAP para toda la población de fondo
-            shap_values = self.explainer(df_bg)
+            shap_values = self.explainer(self.x_test)
             
             # 1. Comprobar las dimensiones de los valores SHAP
             if len(shap_values.shape) == 3:
@@ -50,7 +42,7 @@ class XAIToolkit:
             mean_abs_shap = np.abs(valores_objetivo).mean(axis=0)
 
             # 3. Mapear con los nombres de las columnas
-            feature_names = df_bg.columns
+            feature_names = self.labels
 
             global_importance = {
                 feature: float(importance) 
@@ -66,7 +58,7 @@ class XAIToolkit:
                 feature_idx = list(feature_names).index(feature)
                 
                 # Extraer los valores reales de la columna y sus correspondientes valores SHAP
-                f_values = df_bg.iloc[:, feature_idx].values
+                f_values = self.x_test[:, feature_idx]
                 s_values = valores_objetivo[:, feature_idx]
                 
                 # Calcular correlación para determinar la dirección del impacto
@@ -81,7 +73,7 @@ class XAIToolkit:
                     impacto = "Negativo (A mayor valor de la variable, menor es la predicción)"
                 else:
                     impacto = "Complejo/No lineal (El impacto depende de rangos específicos o interacciones)"
-
+                
                 top_features_summary[feature] = {
                     "importancia_media_absoluta": round(importance, 4),
                     "direccion_impacto": impacto
