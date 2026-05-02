@@ -1,0 +1,14 @@
+{
+    "dataset_description": "Dataset que analiza variables relacionadas con la salud y el consumo de bebidas alcohólicas",
+    "target_description": "Variable objetivo que indica si una persona ha superado el límite de alcohol permitido",
+    "features": {
+        "weight_kg": "Peso en kilogramos, con un promedio de 73.845 kg y desviación estándar de 14.071 kg (min: 45 kg, max: 119.7 kg)",
+        "gender": "Género, con una distribución binaria (0 = masculino, 1 = femenino), con un promedio de 0.506 y desviación estándar de 0.500",
+        "n_drinks": "Número de bebidas consumidas, con un promedio de 3.504 y desviación estándar de 1.746 (min: 1, max: 10)",
+        "drink_duration_h": "Duración del consumo de bebidas en horas, con un promedio de 1.5581 y desviación estándar de 0.737 (min: 0.5, max: 4.88)",
+        "stomach_content": "Contenido estomacal, con un promedio de 1.004 y desviación estándar de 0.781 (min: 0, max: 2)",
+        "age": "Edad en años, con un promedio de 35.623 y desviación estándar de 11.198 (min: 18, max: 75)",
+        "bac": "Tasa alcohólica en sangre, con un promedio de 0.0735 y desviación estándar de 0.053 (min: 0, max: 0.3874)"
+    },
+    "dataset_name": "bac_dataset"
+}

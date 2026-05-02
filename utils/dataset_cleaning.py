@@ -1,122 +1,14 @@
-# import pandas as pd
-# import numpy as np
-
-# from sklearn.preprocessing import StandardScaler, OneHotEncoder
-# from sklearn.model_selection import train_test_split
-
-# def preprocess_dataset(dataset : pd.DataFrame, target : str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-#     """
-#     Cleans the dataset, one-hot-encode the categorical features and split the dataset into train and test.
-
-#     Args:
-#         target (str): Target feature for the ML model.
-
-#     Returns:
-#         - X_train: Training data
-#         - X_test: Test data
-#         - Y_train: Training labels
-#         - Y_test: Test labels
-#     """
-#     dataset = dataset.dropna()
-#     dataset = dataset.reset_index(drop = True)
-
-#     is_numerical = np.vectorize(lambda x : np.issubdtype(x, np.number))
-#     numericals = is_numerical(dataset.dtypes)
-
-#     enc = OneHotEncoder()
-#     for i in range(len(numericals)):
-#         name = dataset.iloc[:, i].name
-#         if target is not name and not numericals[i]:
-#             OHE = enc.fit_transform(dataset[name]).toarray()
-#             dataset = dataset.drop(name, axis = 1)
-#             dataset = dataset.reset_index(drop = True)
-#             dataset = pd.concat([pd.DataFrame(OHE, columns=enc.get_feature_names_out()).reset_index(drop = True), dataset], axis = 1)
-        
-#     X = dataset.drop(target, axis = 1).to_numpy()
-#     y = dataset[target].to_numpy()
-
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
-#     scaler = StandardScaler()
-#     X_train = scaler.fit_transform(X_train)
-#     X_test = scaler.transform(X_test)
-
-#     return X_train, X_test, y_train, y_test
-
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 
+import os
 import pandas as pd
 import numpy as np
 import json
-from langchain_community.chat_models import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 
-def generate_dataset_profile(df: pd.DataFrame, target: str) -> str:
-    """
-    Agente Perfilador: Extrae estadísticas crudas y usa Llama 3 en Ollama 
-    para generar un diccionario de metadatos semántico en JSON.
-    """
-    # 1. Extraer estadísticas básicas con Pandas
-    numericals_stats = df.select_dtypes(include=[np.number]).describe().to_dict()
-    
-    categoricals_stats = {}
-    for col in df.select_dtypes(exclude=[np.number]).columns:
-        if col != target:
-            categoricals_stats[col] = df[col].unique().tolist()
-            
-    target_info = {
-        "name": target,
-        "type": str(df[target].dtype),
-        "unique_values": df[target].unique().tolist()
-    }
-    # 2. Configurar el Output Parser para forzar y parsear el JSON
-    parser = JsonOutputParser()
+from agents.dataset_profiler_agent import generate_dataset_profile
 
-    # 3. Crear el Prompt Template estilo LangChain
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """Eres un Analista de Datos experto.
-        Tu tarea es analizar las estadísticas de un dataset y generar un diccionario de datos semántico.
-        
-        {format_instructions}"""),
-        ("human", """ESTADÍSTICAS DEL DATASET:
-        - Target (Variable a predecir): {target_info}
-        - Variables Numéricas (Resumen): {numericals_stats}
-        - Variables Categóricas (Ejemplos): {categoricals_stats}""")
-    ])
-
-    # 4. Instanciar el modelo LLM mediante ChatOllama
-    # Nota: Le pasamos format="json" para activar el modo JSON nativo de Ollama
-    llm = ChatOllama(model="llama3", temperature=0, format="json")
-
-    # 5. Componer la cadena (Pipeline)
-    chain = prompt | llm | parser
-
-    # 6. Ejecutar la cadena
-    try:
-        response_dict = chain.invoke({
-            "target_info": json.dumps(target_info),
-            "numericals_stats": json.dumps(numericals_stats),
-            "categoricals_stats": json.dumps(categoricals_stats),
-            "format_instructions": """Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta:
-            {
-                "dataset_description": "Breve descripción inferida",
-                "target_description": "Qué significa la variable objetivo",
-                "features": {
-                    "nombre_de_columna": "Descripción semántica y valores típicos"
-                }
-            }"""
-        })
-        # LangChain devuelve un diccionario de Python gracias al JsonOutputParser. 
-        # Lo convertimos a string JSON para mantener la compatibilidad con el resto de tu código.
-        return json.dumps(response_dict) 
-        
-    except Exception as e:
-        print(f"Error ejecutando la cadena de LangChain con Ollama: {e}")
-        return "{}"
-    
-def preprocess_dataset(dataset: pd.DataFrame, target: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]:
+def preprocess_dataset(dataset: pd.DataFrame, dataset_path: str, target: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]:
     """
     Cleans the dataset, generates semantic profile, one-hot-encodes categorical features, 
     and splits the dataset into train and test.
@@ -125,9 +17,43 @@ def preprocess_dataset(dataset: pd.DataFrame, target: str) -> tuple[np.ndarray, 
     dataset = dataset.reset_index(drop=True)
 
     # --- NUEVO: Generar el perfil antes de transformar los datos ---
-    dataset_metadata_json = generate_dataset_profile(dataset, target)
+    # dataset_metadata_json = generate_dataset_profile(dataset, target)
 
-    print(dataset_metadata_json)
+    # print(dataset_metadata_json)
+    # ---------------------------------------------------------------
+    # 1. Extraer el directorio y el nombre base del archivo
+    dataset_dir = os.path.dirname(dataset_path)
+    dataset_filename = os.path.basename(dataset_path)
+    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .xlsx, etc.)
+    
+    # 2. Construir la ruta esperada para el JSON
+    metadata_file_path = os.path.join(dataset_dir, f"{dataset_name}_metadata.json")
+    
+    # 3. Comprobar si existe o generarlo
+    if os.path.exists(metadata_file_path):
+        print(f"[*] Cargando metadatos cacheados desde: {metadata_file_path}")
+        with open(metadata_file_path, 'r', encoding='utf-8') as f:
+            dataset_metadata_json = f.read()
+    else:
+        print("[*] Metadatos no encontrados. Generando perfil con el Agente Perfilador...")
+        dataset_metadata_json = generate_dataset_profile(dataset, target)
+        
+        # --- NUEVO: Añadir 'dataset_name' al JSON generado ---
+        try:
+            # Convertimos el string a diccionario
+            metadata_dict = json.loads(dataset_metadata_json)
+            # Inyectamos el nombre del dataset
+            metadata_dict["dataset_name"] = dataset_name
+            # Volvemos a convertirlo a string JSON formateado
+            dataset_metadata_json = json.dumps(metadata_dict, indent=4, ensure_ascii=False)
+        except json.JSONDecodeError:
+            print("[!] Advertencia: El Agente Perfilador no devolvió un JSON válido. Guardando como texto crudo.")
+        # -----------------------------------------------------
+
+        # 4. Guardar el resultado en la misma carpeta para la próxima vez
+        with open(metadata_file_path, 'w', encoding='utf-8') as f:
+            f.write(dataset_metadata_json)
+        print(f"[*] Metadatos guardados exitosamente en: {metadata_file_path}")
     # ---------------------------------------------------------------
 
     is_numerical = np.vectorize(lambda x: np.issubdtype(x, np.number))
@@ -155,4 +81,20 @@ def preprocess_dataset(dataset: pd.DataFrame, target: str) -> tuple[np.ndarray, 
     X_test = scaler.transform(X_test)
 
     # Devolvemos el metadato como 5to elemento para guardarlo o pasarlo al otro agente
-    return X_train, X_test, y_train, y_test, dataset_metadata_json
+    return X_train, X_test, y_train, y_test, dataset_metadata_json, scaler
+
+def descale_x(row: np.ndarray, scaler, feature_names: list) -> dict:
+    """
+    Toma el array estandarizado del cliente, revierte el escalado a sus valores 
+    originales de negocio y lo convierte en un diccionario legible.
+    """
+    # inverse_transform espera un array 2D, así que hacemos un reshape temporal
+    descaled_x = scaler.inverse_transform(row.reshape(1, -1))[0]
+    
+    # Redondeamos a 2 decimales para que el LLM no reciba números con 15 decimales
+    descaled_x = np.round(descaled_x, 2)
+    
+    # Emparejamos los nombres de las columnas con sus valores reales
+    descaled_x_dict = dict(zip(feature_names, descaled_x))
+    
+    return descaled_x_dict

@@ -5,11 +5,10 @@ from langchain_classic.agents import AgentExecutor, create_structured_chat_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import StructuredTool
 
-def setup_xai_agent(dataset_metadata_json, dataset_name, model_info, toolkit):
+def setup_xai_agent(metadata, model_info, toolkit):
     # 1. Procesar el metadato generado por el Agente Perfilador
-    metadata = json.loads(dataset_metadata_json)
-    
     # Extraemos la información del JSON para el prompt
+    dataset_name = metadata.get("dataset_name", "No disponible")
     description = metadata.get("dataset_description", "No disponible")
     target_info = metadata.get("target_description", "No disponible")
     # Convertimos el diccionario de features a un string legible para el LLM
@@ -65,7 +64,7 @@ def setup_xai_agent(dataset_metadata_json, dataset_name, model_info, toolkit):
     ```json
     {{
         "action": "Final Answer",
-        "action_input": "Tu explicación larga y detallada aquí."
+        "action_input": "Tu explicación larga aquí. Usa \\n para saltos de línea. NUNCA uses comillas triples."
     }}
     ```
 

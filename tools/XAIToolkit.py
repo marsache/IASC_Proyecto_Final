@@ -5,12 +5,35 @@ import pandas as pd
 import numpy as np
 
 class XAIToolkit:
-    def __init__(self, model, x_test, labels):
-        # La parte pesada se ejecuta solo UNA vez al arrancar la app
+    def __init__(self, model, x_test, dataset_metadata):
+        # 1. Asignaciones básicas
         self.model = model
-        self.explainer = shap.Explainer(self.model)
         self.x_test = x_test
-        self.labels = labels
+        self.dataset_metadata = json.loads(dataset_metadata)
+        
+        # [Nota] Si quieres los nombres cortos de las variables (ej: "edad", "salario"), 
+        # debes usar .keys(). Si usas .values(), obtendrás las descripciones semánticas 
+        # largas que generó el agente, lo cual puede romper los gráficos de SHAP.
+        self.labels = list(self.dataset_metadata['features'].keys())
+        
+        # 2. Enrutamiento Inteligente del Explainer
+        model_name = type(self.model).__name__
+        
+        if "RandomForest" in model_name or "GradientBoosting" in model_name:
+            # TreeExplainer es el más rápido y exacto para algoritmos basados en árboles
+            self.explainer = shap.TreeExplainer(self.model)
+            
+        elif "Logistic" in model_name or "Linear" in model_name:
+            # LinearExplainer es específico para modelos lineales, pero EXIGE un dataset de fondo (masker)
+            self.explainer = shap.LinearExplainer(self.model, self.x_test)
+            
+        else:
+            # FALLBACK para modelos de caja negra (como SVC, SVR, KNN, etc.)
+            # Pasamos explícitamente la función de predicción y un resumen de x_test.
+            # Usamos shap.sample para coger un fondo representativo de 100 muestras 
+            # y que el cálculo no tarde horas.
+            background_summary = shap.sample(self.x_test, 100)
+            self.explainer = shap.Explainer(self.model.predict, background_summary)
 
     def tool_shap_explain_global(self, top_k: int = 5) -> str:
         """
