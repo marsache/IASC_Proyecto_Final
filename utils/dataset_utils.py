@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import numpy as np
 import json
+import random
 
 from agents.dataset_profiler_agent import generate_dataset_profile
 
@@ -83,18 +84,38 @@ def preprocess_dataset(dataset: pd.DataFrame, dataset_path: str, target: str) ->
     # Devolvemos el metadato como 5to elemento para guardarlo o pasarlo al otro agente
     return X_train, X_test, y_train, y_test, dataset_metadata_json, scaler
 
-def descale_x(row: np.ndarray, scaler, feature_names: list) -> dict:
+def get_random_row(dataset: np.ndarray, dataset_metadata):
     """
-    Toma el array estandarizado del cliente, revierte el escalado a sus valores 
-    originales de negocio y lo convierte en un diccionario legible.
+    Selecciona una fila aleatoria de un array de NumPy (ej. x_test) y la mapea
+    a un diccionario usando los nombres de las features del metadata.
     """
-    # inverse_transform espera un array 2D, así que hacemos un reshape temporal
-    descaled_x = scaler.inverse_transform(row.reshape(1, -1))[0]
+    # 1. Seleccionamos una fila aleatoria del array de test
+    sample = random.choice(dataset)
     
-    # Redondeamos a 2 decimales para que el LLM no reciba números con 15 decimales
-    descaled_x = np.round(descaled_x, 2)
+    # 2. Extraemos los nombres de las columnas
+    labels = list(dataset_metadata['features'].keys())
     
-    # Emparejamos los nombres de las columnas con sus valores reales
-    descaled_x_dict = dict(zip(feature_names, descaled_x))
+    # 3. zip() empareja automáticamente (label1, valor1), (label2, valor2)...
+    sample_test = dict(zip(labels, sample))
+
+    return sample_test
+
+def descale_x(row: np.ndarray, scaler) -> dict:
+    """
+    Toma un diccionario con los valores estandarizados del cliente, revierte 
+    el escalado a sus valores originales de negocio y devuelve un nuevo diccionario.
+    """
+    # 1. Extraemos las etiquetas y los valores estandarizados del diccionario
+    feature_names = list(row.keys())
+    standardized_values = np.array(list(row.values()))
+    
+    # 2. inverse_transform espera un array 2D, así que hacemos un reshape temporal
+    descaled_values = scaler.inverse_transform(standardized_values.reshape(1, -1))[0]
+    
+    # 3. Redondeamos a 2 decimales para que el LLM reciba números limpios
+    descaled_values = np.round(descaled_values, 2)
+    
+    # 4. Volvemos a emparejar los nombres de las columnas con sus valores reales
+    descaled_x_dict = dict(zip(feature_names, descaled_values))
     
     return descaled_x_dict

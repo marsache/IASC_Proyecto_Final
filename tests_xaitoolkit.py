@@ -4,7 +4,7 @@ import json
 # ours
 from utils.user_input_handling import find_dataset, find_target_feature_in_dataset
 import tools.XAIToolkit as xai
-from utils.dataset_cleaning import preprocess_dataset, descale_x
+from utils.dataset_utils import preprocess_dataset, descale_x, get_random_row
 from agents.xai_agent import setup_xai_agent
 from utils.models import generate_model_info, build_and_train_recommended_models
 from agents.model_selector_agent import recommend_best_models
@@ -34,31 +34,10 @@ def preparar_entorno():
         model["model_info"] = model_info
         print(model_info)
 
-    return models, x_train, x_test, y_train, y_test, dataset_metadata, scaler
+    return models, x_train, x_test, y_train, y_test, json.loads(dataset_metadata), scaler
 
-# ==========================================
-# 3. EJECUCIÓN SIN LLM (Prueba Unitaria)
-# ==========================================
-def test_sin_llm(toolkit, cliente_ejemplo):
-    print("\n" + "="*50)
-    print("🚀 MODO 1: EJECUCIÓN SIN LLM (Raw JSON)")
-    print("="*50)
-    
-    print("\n--- 🌍 Explicación Global ---")
-    print(toolkit.tool_shap_explain_global(top_k=3))
-    
-    print("\n--- 👤 Explicación Local (Cliente Ejemplo) ---")
-    print(toolkit.tool_shap_explain_local_prediction(instance_data=cliente_ejemplo))
-
-
-# ==========================================
-# 4. EJECUCIÓN CON LLM (LangChain + Ollama)
-# ==========================================
 def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, model_info, dataset_metadata):
-    print("\n" + "="*50)
-    print("🤖 MODO 2: EJECUCIÓN CON LLM (Ollama + LangChain)")
     print("="*50)
-    
     agent_executor = setup_xai_agent(metadata=dataset_metadata, model_info=model_info, toolkit=toolkit)
 
     # 4.4. Probar las consultas
@@ -79,24 +58,10 @@ if __name__ == "__main__":
     # 1. Preparar datos y modelo
     models, x_train, x_test, y_train, y_test, dataset_metadata, scaler = preparar_entorno()
     
-    print(x_train.shape)
-    # 2. Inicializar Toolkit
+    # 2. Inicializar Toolkit con un solo modelo
     toolkit = xai.XAIToolkit(model=models[0]["model_object"], x_test=x_test, dataset_metadata=dataset_metadata)
     
-    sample = x_test[0]
-    dataset_metadata = json.loads(dataset_metadata)
+    sample = get_random_row(dataset=x_test, dataset_metadata=dataset_metadata)
 
-    print(dataset_metadata)
-    labels = list(dataset_metadata['features'].keys())
-    i = 0
-    sample_test = {}
-    for label in labels:
-        sample_test[label] = sample[i]
-        i += 1
-
-    # print(sample_test)
-    # 3. Probar funciones crudas
-    # test_sin_llm(toolkit, sample_test)
-    
     # 4. Probar agente (Descomenta la siguiente línea si tienes Ollama instalado y corriendo)
-    test_con_llm(toolkit, sample_test, descale_x(sample, scaler, labels), models[0]["model_info"], dataset_metadata)
+    test_con_llm(toolkit, sample, descale_x(sample, scaler), models[0]["model_info"], dataset_metadata)

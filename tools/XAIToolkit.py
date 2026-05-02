@@ -9,7 +9,7 @@ class XAIToolkit:
         # 1. Asignaciones básicas
         self.model = model
         self.x_test = x_test
-        self.dataset_metadata = json.loads(dataset_metadata)
+        self.dataset_metadata = dataset_metadata
         
         # [Nota] Si quieres los nombres cortos de las variables (ej: "edad", "salario"), 
         # debes usar .keys(). Si usas .values(), obtendrás las descripciones semánticas 
