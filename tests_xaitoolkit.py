@@ -34,7 +34,7 @@ def preparar_entorno():
         model["model_info"] = model_info
         print(model_info)
 
-    return models, x_train, x_test, y_train, y_test, json.loads(dataset_metadata), scaler
+    return models, x_train, x_test, y_train, y_test, json.loads(dataset_metadata), scaler, dataset, target
 
 def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, model_info, dataset_metadata):
     print("="*50)
@@ -51,15 +51,21 @@ def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, model_info,
     })
     print("\nRespuesta LLM:\n", response_local['output'])
 
+    print(f"\nUsuario: Explícame qué debería cambiar para que me de otra predicción: {cliente_ejemplo}")
+    response_local = agent_executor.invoke({
+        "input": f"Explícame en un lenguaje de negocio qué debo cambiar para que cambie la predicción en el siguiente cliente (valores reales): {cliente_ejemplo_descaled}"
+    })
+    print("\nRespuesta LLM:\n", response_local['output'])
+
 # ==========================================
 # BLOQUE PRINCIPAL
 # ==========================================
 if __name__ == "__main__":
     # 1. Preparar datos y modelo
-    models, x_train, x_test, y_train, y_test, dataset_metadata, scaler = preparar_entorno()
+    models, x_train, x_test, y_train, y_test, dataset_metadata, scaler, dataset, target = preparar_entorno()
     
     # 2. Inicializar Toolkit con un solo modelo
-    toolkit = xai.XAIToolkit(model=models[0]["model_object"], x_test=x_test, dataset_metadata=dataset_metadata)
+    toolkit = xai.XAIToolkit(model=models[0]["model_object"], x_test=x_test, dataset_metadata=dataset_metadata, dataset = dataset, target = target)
     
     sample = get_random_row(dataset=x_test, dataset_metadata=dataset_metadata)
 

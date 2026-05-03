@@ -5,17 +5,30 @@ import pandas as pd
 import numpy as np
 from lime import lime_tabular
 
+from dice_ml import Data, Model, Dice
+
 class XAIToolkit:
-    def __init__(self, model, x_test, dataset_metadata):
+    def __init__(self, model, x_test, dataset_metadata, dataset, target):
         # 1. Asignaciones básicas
         self.model = model
         self.x_test = x_test
         self.dataset_metadata = dataset_metadata
+        self.target = target
         
         # [Nota] Si quieres los nombres cortos de las variables (ej: "edad", "salario"), 
         # debes usar .keys(). Si usas .values(), obtendrás las descripciones semánticas 
         # largas que generó el agente, lo cual puede romper los gráficos de SHAP.
         self.labels = list(self.dataset_metadata['features'].keys())
+
+        d_dice = Data(
+            dataframe=dataset,
+            continuous_features=self.labels,
+            outcome_name=target
+        )
+
+        m_dice = Model(model=model, backend='sklearn')
+
+        self.dice = Dice(d_dice, m_dice, method='genetic')
         
         # 2. Enrutamiento Inteligente del Explainer (SHAP)
         model_name = type(self.model).__name__
@@ -51,6 +64,37 @@ class XAIToolkit:
         if hasattr(self.model, "predict_proba"):
             return self.model.predict_proba
         return lambda x: self.model.predict(x).reshape(-1, 1)
+    
+    def tool_dice_explain(self, instance_data : dict, features_to_vary : list[str], top_k: int = 5) -> str:
+        """
+        Genera contraejemplos de un registro.
+        Llama a esta función si el individuo pregunta "¿Qué debo cambiar para que salga otro resultado?"
+
+        Args:
+            instance_data (dict): Un diccionario con los nombres de las columnas y los valores 
+                                para el individuo a predecir.
+            features_to_vary (list[str]): Lista de las variables del dataset que son posibles de variar de forma sencilla para generar los contraejemplos.
+            top_k (int, optional): Número de contraejemplos a genearar. Por defectoe es 5.
+
+        Returns:
+            str: Un JSON en formato string de los contraejemplos
+        """
+        df_instance = pd.DataFrame([instance_data])
+
+        dice_exp = self.dice.generate_counterfactuals(
+        instance_data,
+        total_CFs=top_k,
+        desired_class = self.target, 
+        features_to_vary=features_to_vary,
+        )
+        
+        result = {
+            "analisis" : f"{top_k} contrajemplos",
+            "contraejemplos" : dice_exp.cf_examples_list[0].final_cfs_df.to_dict()
+        }
+
+        return json.dumps(result)
+    
 
     def tool_shap_explain_global(self, top_k: int = 5) -> str:
         """

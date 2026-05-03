@@ -38,12 +38,18 @@ def setup_xai_agent(metadata, model_info, toolkit):
         name="explicar_prediccion_local",
         description="Útil para explicar por qué se tomó una decisión para un cliente específico."
     )
+
+    tool_cf = StructuredTool.from_function(
+        func = toolkit.tool_dice_explain,
+        name = "generar_contraejemplo",
+        description="Útil para dar ejemplos de qué se debe cambiar en una instancia para que cambie el resultado"
+    )
     
     
     #tools = [tool_global, tool_local, tool_lime_local]
-    tools = [tool_global, tool_local]
+    tools = [tool_global, tool_local, tool_cf]
     #tool_names = [tool_global.name, tool_local.name, tool_lime_local.name]
-    tool_names = [tool_global.name, tool_local.name]
+    tool_names = [tool_global.name, tool_local.name, tool_cf.name]
     # 3. Configurar LLM local
     llm = ChatOllama(model="llama3", temperature=0)
 
