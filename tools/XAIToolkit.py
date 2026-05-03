@@ -3,6 +3,7 @@ import json
 
 import pandas as pd
 import numpy as np
+from lime import lime_tabular
 
 class XAIToolkit:
     def __init__(self, model, x_test, dataset_metadata):
@@ -16,7 +17,7 @@ class XAIToolkit:
         # largas que generó el agente, lo cual puede romper los gráficos de SHAP.
         self.labels = list(self.dataset_metadata['features'].keys())
         
-        # 2. Enrutamiento Inteligente del Explainer
+        # 2. Enrutamiento Inteligente del Explainer (SHAP)
         model_name = type(self.model).__name__
         
         if "RandomForest" in model_name or "GradientBoosting" in model_name:
@@ -34,6 +35,22 @@ class XAIToolkit:
             # y que el cálculo no tarde horas.
             background_summary = shap.sample(self.x_test, 100)
             self.explainer = shap.Explainer(self.model.predict, background_summary)
+
+        # 3. Inicializar el Explainer LIME
+        # LIME siempre trabaja como caja negra, por lo que no necesita enrutamiento.
+        # Se usa x_test como datos de fondo para estimar la distribución de las perturbaciones.
+        lime_mode = "classification" if hasattr(self.model, "predict_proba") else "regression"
+        self.lime_explainer = lime_tabular.LimeTabularExplainer(
+            training_data=self.x_test,
+            feature_names=self.labels,
+            mode=lime_mode,
+        )
+
+    def _get_lime_predict_fn(self):
+        """Devuelve la función de predicción adecuada para el explainer LIME."""
+        if hasattr(self.model, "predict_proba"):
+            return self.model.predict_proba
+        return lambda x: self.model.predict(x).reshape(-1, 1)
 
     def tool_shap_explain_global(self, top_k: int = 5) -> str:
         """
@@ -189,3 +206,55 @@ class XAIToolkit:
             
         except Exception as e:
             return json.dumps({"error": f"No se pudo calcular la explicación: {str(e)}"})
+
+    def tool_lime_explain_local_prediction(self, instance_data: dict) -> str:
+        """
+        Útil para explicar por qué el modelo tomó una decisión específica para un solo registro o individuo
+        usando el método LIME (Local Interpretable Model-agnostic Explanations).
+        Llama a esta función cuando el usuario pregunte "¿Por qué se ha predicho X para este cliente?"
+        y quiera una explicación basada en LIME.
+        
+        Args:
+            instance_data (dict): Un diccionario con los nombres de las columnas y los valores 
+                                para el individuo a predecir.
+        Returns:
+            str: Un JSON en formato string con la contribución de las 5 variables más importantes 
+                para esta predicción específica según LIME.
+        """
+        try:
+            # Validar que instance_data contiene todas las variables requeridas
+            missing = [f for f in self.labels if f not in instance_data]
+            if missing:
+                return json.dumps({"error": f"Faltan las siguientes variables en instance_data: {missing}"})
+
+            # Convertir el dict a array numpy respetando el orden de columnas del modelo
+            instance = np.array([instance_data[feature] for feature in self.labels])
+
+            explanation = self.lime_explainer.explain_instance(
+                data_row=instance,
+                predict_fn=self._get_lime_predict_fn(),
+                num_features=5,
+            )
+
+            # as_list() devuelve [(descripcion_regla, contribucion), ...]
+            feature_contributions = {rule: round(float(weight), 4) for rule, weight in explanation.as_list()}
+
+            if hasattr(self.model, "predict_proba"):
+                prediction = float(self.model.predict_proba([instance])[0][1])
+            else:
+                prediction = float(self.model.predict([instance])[0])
+
+            result = {
+                "prediccion_modelo": round(prediction, 4),
+                "top_5_variables_impacto": feature_contributions,
+            }
+
+            return json.dumps(result)
+
+        except Exception as e:
+            return json.dumps({"error": f"No se pudo calcular la explicación LIME local: {str(e)}"})
+        
+    def tool_shap_lime_explain_local_prediction(self, instance_data: dict) -> str:
+        shap_result = self.tool_shap_explain_local_prediction(instance_data)
+        lime_result = self.tool_lime_explain_local_prediction(instance_data)
+        return shap_result + lime_result

@@ -21,14 +21,29 @@ def setup_xai_agent(metadata, model_info, toolkit):
         description="Útil para explicar qué variables importan más en todo el modelo general."
     )
     
+    # tool_local = StructuredTool.from_function(
+    #     func=toolkit.tool_shap_explain_local_prediction,
+    #     name="explicar_prediccion_local",
+    #     description="Útil para explicar por qué se tomó una decisión para un cliente específico."
+    # )
+
+    # tool_lime_local = StructuredTool.from_function(
+    #     func=toolkit.tool_lime_explain_local_prediction,
+    #     name="explicar_prediccion_local_lime",
+    #     description="Útil para explicar por qué el modelo tomó una decisión para un cliente específico usando LIME."
+    # )
+
     tool_local = StructuredTool.from_function(
-        func=toolkit.tool_shap_explain_local_prediction,
+        func=toolkit.tool_shap_lime_explain_local_prediction,
         name="explicar_prediccion_local",
         description="Útil para explicar por qué se tomó una decisión para un cliente específico."
     )
     
+    
+    #tools = [tool_global, tool_local, tool_lime_local]
     tools = [tool_global, tool_local]
-    tool_names = [tool_global.name, tool_local.name] 
+    #tool_names = [tool_global.name, tool_local.name, tool_lime_local.name]
+    tool_names = [tool_global.name, tool_local.name]
     # 3. Configurar LLM local
     llm = ChatOllama(model="llama3", temperature=0)
 
