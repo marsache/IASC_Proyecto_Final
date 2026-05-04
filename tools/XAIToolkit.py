@@ -1,3 +1,10 @@
+import os
+import uuid
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 import shap
 import json
 
@@ -5,15 +12,19 @@ import pandas as pd
 import numpy as np
 from lime import lime_tabular
 
+from alibi.explainers import AnchorTabular
+
 from dice_ml import Data, Model, Dice
 
 class XAIToolkit:
-    def __init__(self, model, x_test, dataset_metadata, dataset, target):
+    def __init__(self, model, x_test, dataset_metadata, dataset, target, plots_dir: str = "plots"):
         # 1. Asignaciones básicas
         self.model = model
         self.x_test = x_test
         self.dataset_metadata = dataset_metadata
         self.target = target
+        self.plots_dir = plots_dir
+        os.makedirs(self.plots_dir, exist_ok=True)
         
         # [Nota] Si quieres los nombres cortos de las variables (ej: "edad", "salario"), 
         # debes usar .keys(). Si usas .values(), obtendrás las descripciones semánticas 
@@ -59,11 +70,29 @@ class XAIToolkit:
             mode=lime_mode,
         )
 
+        # 4. Inicializar el Explainer AnchorTabular
+        # AnchorTabular trabaja siempre como caja negra: sólo necesita una función de predicción
+        # y los nombres de las variables. Se ajusta con x_test como datos de fondo para
+        # aprender la distribución usada en las perturbaciones.
+        self.anchor_explainer = AnchorTabular(
+            predictor=self.model.predict,
+            feature_names=self.labels,
+        )
+        self.anchor_explainer.fit(self.x_test)
+
     def _get_lime_predict_fn(self):
         """Devuelve la función de predicción adecuada para el explainer LIME."""
         if hasattr(self.model, "predict_proba"):
             return self.model.predict_proba
         return lambda x: self.model.predict(x).reshape(-1, 1)
+
+    def _save_plot(self, prefix: str) -> str:
+        """Guarda la figura matplotlib activa en el directorio de plots y devuelve la ruta."""
+        filename = f"{prefix}_{uuid.uuid4().hex[:8]}.png"
+        path = os.path.join(self.plots_dir, filename)
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return path
     
     def tool_dice_explain(self, instance_data : dict, features_to_vary : list[str], desired_class : int, top_k: int = 5) -> str:
         """
@@ -182,6 +211,15 @@ class XAIToolkit:
                 "base_value_promedio_dataset": round(base_value, 4) if base_value is not None else "N/A",
                 "variables": top_features_summary
             }
+
+            # Generar gráfico de barras SHAP (importancia global)
+            try:
+                sv_for_plot = shap_values[:, :, 1] if len(shap_values.shape) == 3 else shap_values
+                sv_for_plot.feature_names = self.labels
+                shap.plots.bar(sv_for_plot, show=False)
+                result["plot_path"] = self._save_plot("shap_global_bar")
+            except Exception:
+                pass
             
             return json.dumps(result)
             
@@ -245,6 +283,14 @@ class XAIToolkit:
                 "prediccion_final_modelo": round(prediction, 4),
                 "top_5_variables_impacto": top_contributions
             }
+
+            # Generar gráfico waterfall SHAP (explicación local)
+            try:
+                sv_for_plot = shap_values[:, :, 1] if len(shap_values.shape) == 3 else shap_values
+                shap.plots.waterfall(sv_for_plot[0], show=False)
+                result["plot_path"] = self._save_plot("shap_local_waterfall")
+            except Exception:
+                pass
             
             return json.dumps(result)
             
@@ -293,12 +339,64 @@ class XAIToolkit:
                 "top_5_variables_impacto": feature_contributions,
             }
 
+            # Generar gráfico LIME (explicación local)
+            try:
+                fig = explanation.as_pyplot_figure()
+                path = os.path.join(self.plots_dir, f"lime_local_{uuid.uuid4().hex[:8]}.png")
+                fig.savefig(path, bbox_inches="tight")
+                plt.close(fig)
+                result["plot_path"] = path
+            except Exception:
+                pass
+
             return json.dumps(result)
 
         except Exception as e:
             return json.dumps({"error": f"No se pudo calcular la explicación LIME local: {str(e)}"})
         
+    def tool_anchor_explain_local_prediction(self, instance_data: dict) -> str:
+        """
+        Útil para explicar por qué el modelo tomó una decisión específica para un solo registro
+        usando el método Anchors (AnchorTabular de alibi). Devuelve reglas del tipo
+        "SI variable_A > X Y variable_B <= Y → predicción es Z con un 95 % de precisión".
+        Llama a esta función cuando el usuario pregunte "¿Por qué se ha predicho X para este
+        cliente?" y quiera una explicación basada en reglas comprensibles.
+
+        Args:
+            instance_data (dict): Un diccionario con los nombres de las columnas y los valores
+                                para el individuo a predecir.
+        Returns:
+            str: Un JSON en formato string con las reglas ancla, su precisión y su cobertura.
+        """
+        try:
+            missing = [f for f in self.labels if f not in instance_data]
+            if missing:
+                return json.dumps({"error": f"Faltan las siguientes variables en instance_data: {missing}"})
+
+            instance = np.array([instance_data[feature] for feature in self.labels])
+
+            # threshold: confianza mínima para aceptar el ancla (por defecto 0.95)
+            explanation = self.anchor_explainer.explain(instance)
+
+            if hasattr(self.model, "predict_proba"):
+                prediction = float(self.model.predict_proba([instance])[0][1])
+            else:
+                prediction = float(self.model.predict([instance])[0])
+
+            result = {
+                "prediccion_modelo": round(prediction, 4),
+                "reglas_ancla": list(explanation.anchor),
+                "precision": round(float(explanation.precision[0]), 4),
+                "cobertura": round(float(explanation.coverage[0]), 4),
+            }
+
+            return json.dumps(result)
+
+        except Exception as e:
+            return json.dumps({"error": f"No se pudo calcular la explicación Anchor: {str(e)}"})
+
     def tool_shap_lime_explain_local_prediction(self, instance_data: dict) -> str:
-        shap_result = self.tool_shap_explain_local_prediction(instance_data)
-        lime_result = self.tool_lime_explain_local_prediction(instance_data)
-        return shap_result + lime_result
+        shap_result = json.loads(self.tool_shap_explain_local_prediction(instance_data))
+        lime_result = json.loads(self.tool_lime_explain_local_prediction(instance_data))
+        anchor_result = json.loads(self.tool_anchor_explain_local_prediction(instance_data))
+        return json.dumps({"shap": shap_result, "lime": lime_result, "anchor": anchor_result})
