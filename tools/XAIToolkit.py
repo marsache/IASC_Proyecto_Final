@@ -71,8 +71,7 @@ class XAIToolkit:
         Llama a esta función si el individuo pregunta "¿Qué debo cambiar para que salga otro resultado?"
 
         Args:
-            instance_data (dict): Un diccionario con los nombres de las columnas y los valores 
-                                para el individuo a predecir.
+            instance_data (dict): Un diccionario con los nombres de las columnas y los valores del individuo al que generar el contraejemplo.
             features_to_vary (list[str]): Lista de las variables del dataset que son posibles de variar de forma sencilla para generar los contraejemplos.
             top_k (int, optional): Número de contraejemplos a genearar. Por defectoe es 5.
 
@@ -82,7 +81,7 @@ class XAIToolkit:
         df_instance = pd.DataFrame([instance_data])
 
         dice_exp = self.dice.generate_counterfactuals(
-        instance_data,
+        df_instance,
         total_CFs=top_k,
         desired_class = self.target, 
         features_to_vary=features_to_vary,
