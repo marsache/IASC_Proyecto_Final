@@ -51,7 +51,7 @@ def setup_xai_agent(metadata, model_info, toolkit):
     #tool_names = [tool_global.name, tool_local.name, tool_lime_local.name]
     tool_names = [tool_global.name, tool_local.name, tool_cf.name]
     # 3. Configurar LLM local
-    llm = ChatOllama(model="llama3", temperature=0)
+    llm = ChatOllama(model="llama3", temperature=0, format = "json")
 
     # 4. Definir el System Prompt con los datos del perfilador
     # Nota: Usamos doble llave {{ }} para lo que NO queremos que LangChain intente rellenar ahora (formato JSON)
@@ -76,7 +76,12 @@ def setup_xai_agent(metadata, model_info, toolkit):
     ```json
     {{
         "action": "nombre_de_la_herramienta_aqui",
-        "action_input": {{ "nombre_del_parametro": "valor_del_parametro" }}
+        "action_input": {{ 
+        "nombre_del_parametro_1": "valor_del_parametro_1",
+        "nombre_del_parametro_2": "valor_del_parametro_2",
+        ...,
+        "nombre_del_parametro_n": "valor_del_parametro_n"
+        }}
     }}
     ```
 

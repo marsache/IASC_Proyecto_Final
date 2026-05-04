@@ -84,19 +84,26 @@ def preprocess_dataset(dataset: pd.DataFrame, dataset_path: str, target: str) ->
     # Devolvemos el metadato como 5to elemento para guardarlo o pasarlo al otro agente
     return X_train, X_test, y_train, y_test, dataset_metadata_json, scaler
 
-def get_random_row(dataset: np.ndarray, dataset_metadata):
+def get_random_row(dataset: np.ndarray, dataset_metadata, target):
     """
     Selecciona una fila aleatoria de un array de NumPy (ej. x_test) y la mapea
     a un diccionario usando los nombres de las features del metadata.
     """
     # 1. Seleccionamos una fila aleatoria del array de test
-    sample = random.choice(dataset)
+    #sample = random.choice(dataset)
+    i = random.randrange(0, dataset.shape[0])
+    sample = dataset[i]
+
     
     # 2. Extraemos los nombres de las columnas
     labels = list(dataset_metadata['features'].keys())
     
     # 3. zip() empareja automáticamente (label1, valor1), (label2, valor2)...
-    sample_test = dict(zip(labels, sample))
+    sample_test = {}
+
+    sample_test["sample"] = dict(zip(labels, sample))
+
+    sample_test["target"] = target[i]
 
     return sample_test
 

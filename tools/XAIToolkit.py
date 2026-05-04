@@ -65,7 +65,7 @@ class XAIToolkit:
             return self.model.predict_proba
         return lambda x: self.model.predict(x).reshape(-1, 1)
     
-    def tool_dice_explain(self, instance_data : dict, features_to_vary : list[str], top_k: int = 5) -> str:
+    def tool_dice_explain(self, instance_data : dict, features_to_vary : list[str], desired_class : int, top_k: int = 5) -> str:
         """
         Genera contraejemplos de un registro.
         Llama a esta función si el individuo pregunta "¿Qué debo cambiar para que salga otro resultado?"
@@ -73,6 +73,7 @@ class XAIToolkit:
         Args:
             instance_data (dict): Un diccionario con los nombres de las columnas y los valores del individuo al que generar el contraejemplo.
             features_to_vary (list[str]): Lista de las variables del dataset que son posibles de variar de forma sencilla para generar los contraejemplos.
+            desired_class (int): Clase a la que desea ser cambiada
             top_k (int, optional): Número de contraejemplos a genearar. Por defectoe es 5.
 
         Returns:
@@ -83,7 +84,7 @@ class XAIToolkit:
         dice_exp = self.dice.generate_counterfactuals(
         df_instance,
         total_CFs=top_k,
-        desired_class = self.target, 
+        desired_class = desired_class, 
         features_to_vary=features_to_vary,
         )
         
