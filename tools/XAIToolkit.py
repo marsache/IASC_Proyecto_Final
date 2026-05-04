@@ -12,6 +12,8 @@ import pandas as pd
 import numpy as np
 from lime import lime_tabular
 
+from alibi.explainers import AnchorTabular
+
 from dice_ml import Data, Model, Dice
 
 class XAIToolkit:
@@ -67,6 +69,16 @@ class XAIToolkit:
             feature_names=self.labels,
             mode=lime_mode,
         )
+
+        # 4. Inicializar el Explainer AnchorTabular
+        # AnchorTabular trabaja siempre como caja negra: sólo necesita una función de predicción
+        # y los nombres de las variables. Se ajusta con x_test como datos de fondo para
+        # aprender la distribución usada en las perturbaciones.
+        self.anchor_explainer = AnchorTabular(
+            predictor=self.model.predict,
+            feature_names=self.labels,
+        )
+        self.anchor_explainer.fit(self.x_test)
 
     def _get_lime_predict_fn(self):
         """Devuelve la función de predicción adecuada para el explainer LIME."""
@@ -341,7 +353,49 @@ class XAIToolkit:
         except Exception as e:
             return json.dumps({"error": f"No se pudo calcular la explicación LIME local: {str(e)}"})
         
+    def tool_anchor_explain_local_prediction(self, instance_data: dict) -> str:
+        """
+        Útil para explicar por qué el modelo tomó una decisión específica para un solo registro
+        usando el método Anchors (AnchorTabular de alibi). Devuelve reglas del tipo
+        "SI variable_A > X Y variable_B <= Y → predicción es Z con un 95 % de precisión".
+        Llama a esta función cuando el usuario pregunte "¿Por qué se ha predicho X para este
+        cliente?" y quiera una explicación basada en reglas comprensibles.
+
+        Args:
+            instance_data (dict): Un diccionario con los nombres de las columnas y los valores
+                                para el individuo a predecir.
+        Returns:
+            str: Un JSON en formato string con las reglas ancla, su precisión y su cobertura.
+        """
+        try:
+            missing = [f for f in self.labels if f not in instance_data]
+            if missing:
+                return json.dumps({"error": f"Faltan las siguientes variables en instance_data: {missing}"})
+
+            instance = np.array([instance_data[feature] for feature in self.labels])
+
+            # threshold: confianza mínima para aceptar el ancla (por defecto 0.95)
+            explanation = self.anchor_explainer.explain(instance)
+
+            if hasattr(self.model, "predict_proba"):
+                prediction = float(self.model.predict_proba([instance])[0][1])
+            else:
+                prediction = float(self.model.predict([instance])[0])
+
+            result = {
+                "prediccion_modelo": round(prediction, 4),
+                "reglas_ancla": list(explanation.anchor),
+                "precision": round(float(explanation.precision[0]), 4),
+                "cobertura": round(float(explanation.coverage[0]), 4),
+            }
+
+            return json.dumps(result)
+
+        except Exception as e:
+            return json.dumps({"error": f"No se pudo calcular la explicación Anchor: {str(e)}"})
+
     def tool_shap_lime_explain_local_prediction(self, instance_data: dict) -> str:
         shap_result = json.loads(self.tool_shap_explain_local_prediction(instance_data))
         lime_result = json.loads(self.tool_lime_explain_local_prediction(instance_data))
-        return json.dumps({"shap": shap_result, "lime": lime_result})
+        anchor_result = json.loads(self.tool_anchor_explain_local_prediction(instance_data))
+        return json.dumps({"shap": shap_result, "lime": lime_result, "anchor": anchor_result})
