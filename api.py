@@ -83,7 +83,8 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
         metadata = json.loads(metadata_json)
 
         _update_session(
-            session_id, progress=0.40, message="Seleccionando los mejores modelos…"
+            session_id, progress=0.40, message="Seleccionando los mejores modelos…",
+            dataset_metadata=metadata_json
         )
         recommendations_json = recommend_best_models(metadata_json)
         task_type = json.loads(recommendations_json).get("task_type", "classification")
@@ -118,6 +119,29 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
             session_id, progress=0.95, message="Configurando agente XAI…"
         )
         agent_executor = setup_xai_agent(metadata, model_info, toolkit)
+
+        # --- NUEVO: Generar dataset aumentado para el explorador ---
+        _update_session(
+            session_id, progress=0.98, message="Generando predicciones para el explorador..."
+        )
+        
+        # OJO: Dependiendo de cómo funcione tu `preprocess_dataset`, 
+        # debes asegurarte de pasarle a model.predict() los datos ya escalados/codificados.
+        # Si 'scaler' puede transformar el df completo:
+        X_full_scaled = scaler.transform(df_clean.drop(columns=[target])) 
+        y_pred = model.predict(X_full_scaled)
+        
+        # Añadir columnas al dataframe limpio original (para que el usuario lo lea bien)
+        df_clean['Target_Real'] = df_clean[target]
+        df_clean['Target_Predicho'] = y_pred
+        
+        with _sessions_lock:
+            session = _sessions.get(session_id)
+            
+        # Guardarlo como CSV en la carpeta temporal de la sesión
+        augmented_csv_path = os.path.join(session["_tmp_dir"], "augmented_dataset.csv")
+        df_clean.to_csv(augmented_csv_path, index=False)
+        # -----------------------------------------------------------
 
         _update_session(
             session_id,
@@ -252,7 +276,7 @@ def get_status(session_id: str) -> JSONResponse:
             "status": session["status"],
             "progress": session["progress"],
             "message": session["message"],
-            "error": session.get("error"),
+            "dataset_metadata": session.get("dataset_metadata"), # <--- Añade esto
             "model_info": session.get("model_info"),
         }
     )
@@ -331,6 +355,45 @@ def get_plot(filename: str) -> FileResponse:
         raise HTTPException(404, "Plot no encontrado.")
 
     return FileResponse(real_path, media_type="image/png")
+
+
+@app.get("/api/dataset/{session_id}")
+def get_dataset(session_id: str, page: int = 1, size: int = 50) -> JSONResponse:
+    with _sessions_lock:
+        session = _sessions.get(session_id)
+
+    if session is None:
+        raise HTTPException(404, "Sesión no encontrada.")
+    
+    tmp_dir = session.get("_tmp_dir")
+    if not tmp_dir:
+        raise HTTPException(400, "Carpeta de datos no disponible.")
+
+    csv_path = os.path.join(tmp_dir, "augmented_dataset.csv")
+    if not os.path.exists(csv_path):
+        raise HTTPException(400, "Dataset exploratorio no está listo aún.")
+
+    try:
+        # Cargar el dataset (en producción con datasets gigantes usarías chunking o dask)
+        df = pd.read_csv(csv_path)
+        
+        total_rows = int(df.shape[0])
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size
+        
+        # Extraer solo la página solicitada
+        df_page = df.iloc[start_idx:end_idx]
+        
+        return JSONResponse({
+            "total_rows": total_rows,
+            "page": page,
+            "size": size,
+            "columns": df.columns.tolist(),
+            "data": df_page.to_dict(orient="records")
+        })
+        
+    except Exception as exc:
+        raise HTTPException(500, f"Error al leer el dataset: {exc}")
 
 
 # ------------------------------------------------------------------

@@ -26,14 +26,20 @@ class XAIToolkit:
         self.plots_dir = plots_dir
         os.makedirs(self.plots_dir, exist_ok=True)
         
-        # [Nota] Si quieres los nombres cortos de las variables (ej: "edad", "salario"), 
-        # debes usar .keys(). Si usas .values(), obtendrás las descripciones semánticas 
-        # largas que generó el agente, lo cual puede romper los gráficos de SHAP.
-        self.labels = list(self.dataset_metadata['features'].keys())
+        # 1. Obtenemos solo las columnas predictoras (excluyendo el target)
+        features_df = dataset.drop(columns=[target])
 
+        # 2. Filtramos automáticamente solo las columnas numéricas (continuas)
+        # Esto excluirá cosas como 'gender' si son de tipo string/category
+        continuous_cols = features_df.select_dtypes(include=['number']).columns.tolist()
+
+        # (Opcional) Si quieres guardar los labels generales sin el target
+        self.labels = features_df.columns.tolist()
+
+        # 3. Inicializamos DiCE
         d_dice = Data(
             dataframe=dataset,
-            continuous_features=self.labels,
+            continuous_features=continuous_cols, # Pasamos SOLO las numéricas, sin el target
             outcome_name=target
         )
 

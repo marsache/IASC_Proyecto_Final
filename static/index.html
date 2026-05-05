@@ -84,44 +84,26 @@
     }
 
     /* Steps */
-    .step {
-      margin-bottom: 24px;
-    }
+    .step { margin-bottom: 24px; }
     .step-label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .8rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--text-dim);
-      margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: .8rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text-dim); margin-bottom: 10px;
     }
     .step-badge {
-      width: 22px; height: 22px;
-      background: var(--accent);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .72rem;
-      font-weight: 700;
-      color: #fff;
-      flex-shrink: 0;
+      width: 22px; height: 22px; background: var(--accent); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: .72rem;
+      font-weight: 700; color: #fff; flex-shrink: 0;
     }
 
     /* File drop zone */
     .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 28px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-      position: relative;
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      padding: 28px 20px; text-align: center; cursor: pointer;
+      transition: border-color .2s, background .2s; position: relative;
     }
     .drop-zone:hover, .drop-zone.dragover {
-      border-color: var(--accent);
-      background: rgba(124,106,249,.06);
+      border-color: var(--accent); background: rgba(124,106,249,.06);
     }
     .drop-zone input[type="file"] {
       position: absolute; inset: 0; opacity: 0; cursor: pointer;
@@ -132,59 +114,33 @@
 
     /* Preview box */
     .preview-box {
-      margin-top: 12px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      font-size: .82rem;
-      color: var(--text-dim);
-      overflow-x: auto;
-      display: none;
+      margin-top: 12px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px; font-size: .82rem;
+      color: var(--text-dim); overflow-x: auto; display: none;
     }
     .preview-box.visible { display: block; }
     .preview-box .meta {
-      font-weight: 600;
-      color: var(--success);
-      margin-bottom: 8px;
-      font-size: .85rem;
+      font-weight: 600; color: var(--success); margin-bottom: 8px; font-size: .85rem;
     }
 
     /* Target select */
     select {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      padding: 10px 14px;
-      font-size: .9rem;
-      appearance: none;
-      cursor: pointer;
-      outline: none;
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text); padding: 10px 14px;
+      font-size: .9rem; appearance: none; cursor: pointer; outline: none;
       transition: border-color .2s;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888aa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      padding-right: 36px;
+      background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
     }
     select:focus { border-color: var(--accent); }
     select:disabled { opacity: .5; cursor: not-allowed; }
 
     /* Primary button */
     .btn-primary {
-      display: block;
-      width: 100%;
-      margin-top: 28px;
-      padding: 13px;
+      display: block; width: 100%; margin-top: 28px; padding: 13px;
       background: linear-gradient(135deg, var(--accent), #a78bfa);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 1rem;
-      font-weight: 700;
-      cursor: pointer;
-      letter-spacing: .02em;
+      color: #fff; border: none; border-radius: var(--radius);
+      font-size: 1rem; font-weight: 700; cursor: pointer; letter-spacing: .02em;
       transition: opacity .2s, transform .1s;
     }
     .btn-primary:hover:not(:disabled) { opacity: .9; }
@@ -194,308 +150,254 @@
     /* ── Progress screen ──────────────────────────────────────── */
     #screen-progress {
       background: radial-gradient(ellipse at 70% 80%, #1a0a3a 0%, var(--bg) 60%);
-      flex-direction: column;
-      text-align: center;
+      flex-direction: column; text-align: center;
     }
 
     .progress-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 52px 48px;
-      width: 100%;
-      max-width: 480px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; box-shadow: var(--shadow); padding: 52px 48px;
+      width: 100%; max-width: 480px;
     }
 
     .spinner {
-      width: 56px; height: 56px;
-      border: 4px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .9s linear infinite;
-      margin: 0 auto 24px;
+      width: 56px; height: 56px; border: 4px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .9s linear infinite; margin: 0 auto 24px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .progress-card h2 { font-size: 1.25rem; margin-bottom: 8px; }
-    .progress-msg {
-      color: var(--text-dim);
-      font-size: .9rem;
-      min-height: 22px;
-      margin-bottom: 24px;
-    }
+    .progress-msg { color: var(--text-dim); font-size: .9rem; min-height: 22px; margin-bottom: 24px; }
 
-    .progress-bar-wrap {
-      background: var(--surface2);
-      border-radius: 99px;
-      height: 8px;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
+    .progress-bar-wrap { background: var(--surface2); border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 10px; }
     .progress-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), #a78bfa);
-      border-radius: 99px;
-      transition: width .4s ease;
-      width: 0%;
+      height: 100%; background: linear-gradient(90deg, var(--accent), #a78bfa);
+      border-radius: 99px; transition: width .4s ease; width: 0%;
     }
-    .progress-pct {
-      font-size: .82rem;
-      color: var(--text-dim);
-      text-align: right;
+    .progress-pct { font-size: .82rem; color: var(--text-dim); text-align: right; }
+
+    /* Estilos para el Menú de Pestañas */
+    .panel-tabs {
+        display: flex;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0 16px;
+    }
+    .tab-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        padding: 12px 20px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    .tab-btn.active {
+        color: var(--accent-h);
+        border-bottom-color: var(--accent);
+    }
+    .tab-content {
+        display: none;
+        flex: 1;
+        overflow: auto;
+    }
+    .tab-content.active {
+        display: flex;
+        flex-direction: column;
     }
 
-    /* ── Chat screen ──────────────────────────────────────────── */
+    /* Estilos para el Formulario de Caso Manual */
+    .manual-case-form {
+        padding: 24px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .form-group label {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+        font-weight: 600;
+    }
+    .form-group input {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+    .form-group input:focus { border-color: var(--accent); outline: none; }
+    
+    .form-actions {
+        grid-column: 1 / -1;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+    }
+
+    /* ── Chat screen (SPLIT LAYOUT) ───────────────────────────── */
     #screen-chat {
       align-items: stretch;
       padding: 0;
     }
 
-    .chat-layout {
+    .split-layout {
       display: flex;
-      flex-direction: column;
-      height: 100vh;
       width: 100%;
-      max-width: 860px;
-      margin: 0 auto;
+      height: 100vh;
+      overflow: hidden;
     }
 
-    /* Header */
-    .chat-header {
+    .chat-panel {
+      /* flex: 1; <-- Quitamos esto para que respete el tamaño que le des arrastrando */
+      width: 45%; /* Ancho por defecto al cargar la página */
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      flex-shrink: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      min-width: 400px;
+      max-width: 85%; /* Límite máximo para no aplastar del todo la tabla */
+      background: var(--bg);
+      
+      /* LÍNEAS NUEVAS PARA REDIMENSIONAR ARRASTRANDO */
+      resize: horizontal;
+      overflow: hidden; /* Obligatorio para que funcione resize */
     }
-    .chat-header .title {
-      display: flex; align-items: center; gap: 10px;
-      font-weight: 700;
-      font-size: 1.05rem;
+
+    .data-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface2);
+      overflow: hidden;
     }
+
+    /* Header Chat */
+    .chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+    }
+    .chat-header .title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; }
+    
     .status-dot {
-      width: 9px; height: 9px;
-      background: var(--success);
-      border-radius: 50%;
-      flex-shrink: 0;
-      box-shadow: 0 0 6px var(--success);
+      width: 9px; height: 9px; background: var(--success); border-radius: 50%;
+      flex-shrink: 0; box-shadow: 0 0 6px var(--success);
     }
     .btn-ghost {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-      padding: 7px 14px;
-      border-radius: 8px;
-      font-size: .82rem;
-      cursor: pointer;
-      transition: border-color .2s, color .2s;
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      padding: 7px 14px; border-radius: 8px; font-size: .82rem; cursor: pointer; transition: border-color .2s, color .2s;
     }
-    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* Messages */
     .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      scroll-behavior: smooth;
+      flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;
     }
     .chat-messages::-webkit-scrollbar { width: 6px; }
     .chat-messages::-webkit-scrollbar-track { background: transparent; }
     .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-    .msg-row {
-      display: flex;
-      align-items: flex-end;
-      gap: 10px;
-      max-width: 78%;
-    }
+    .msg-row { display: flex; align-items: flex-end; gap: 10px; max-width: 90%; }
     .msg-row.user { align-self: flex-end; flex-direction: row-reverse; }
     .msg-row.bot  { align-self: flex-start; }
 
-    .avatar {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px;
-      flex-shrink: 0;
-    }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
     .avatar.user { background: var(--accent); }
     .avatar.bot  { background: var(--surface2); border: 1px solid var(--border); }
 
-    .bubble {
-      padding: 12px 16px;
-      border-radius: 16px;
-      max-width: 100%;
-      font-size: .92rem;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .msg-row.user .bubble {
-      background: var(--user-bg);
-      border-bottom-right-radius: 4px;
-      color: #d8d0ff;
-    }
-    .msg-row.bot .bubble {
-      background: var(--bot-bg);
-      border: 1px solid var(--border);
-      border-bottom-left-radius: 4px;
-    }
+    .bubble { padding: 12px 16px; border-radius: 16px; max-width: 100%; font-size: .92rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .msg-row.user .bubble { background: var(--user-bg); border-bottom-right-radius: 4px; color: #d8d0ff; }
+    .msg-row.bot .bubble { background: var(--bot-bg); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 
     /* Plot image */
-    .plot-wrap {
-      margin-top: 10px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      max-width: 520px;
-      cursor: zoom-in;
-    }
+    .plot-wrap { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; max-width: 100%; cursor: zoom-in; }
     .plot-wrap img { display: block; width: 100%; }
 
     /* Typing indicator */
-    .typing-indicator {
-      display: flex; align-items: center; gap: 5px;
-      padding: 14px 16px;
-      background: var(--bot-bg);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      border-bottom-left-radius: 4px;
-      width: fit-content;
-    }
-    .typing-dot {
-      width: 7px; height: 7px;
-      background: var(--text-dim);
-      border-radius: 50%;
-      animation: bounce .9s infinite;
-    }
+    .typing-indicator { display: flex; align-items: center; gap: 5px; padding: 14px 16px; background: var(--bot-bg); border: 1px solid var(--border); border-radius: 16px; border-bottom-left-radius: 4px; width: fit-content; }
+    .typing-dot { width: 7px; height: 7px; background: var(--text-dim); border-radius: 50%; animation: bounce .9s infinite; }
     .typing-dot:nth-child(2) { animation-delay: .15s; }
     .typing-dot:nth-child(3) { animation-delay: .30s; }
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); }
-      40%            { transform: translateY(-6px); }
-    }
+    @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
 
     /* Welcome message */
-    .welcome-msg {
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--text-dim);
-      font-size: .9rem;
-    }
+    .welcome-msg { text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: .9rem; }
     .welcome-msg .icon { font-size: 2.5rem; margin-bottom: 10px; }
     .welcome-msg h3 { font-size: 1.1rem; color: var(--text); margin-bottom: 6px; }
 
     /* Input row */
-    .chat-input-row {
-      display: flex;
-      align-items: flex-end;
-      gap: 10px;
-      padding: 16px 24px;
-      border-top: 1px solid var(--border);
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    .chat-input-row textarea {
-      flex: 1;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      padding: 11px 14px;
-      font-size: .92rem;
-      font-family: inherit;
-      resize: none;
-      outline: none;
-      line-height: 1.5;
-      max-height: 140px;
-      overflow-y: auto;
-      transition: border-color .2s;
-    }
+    .chat-input-row { display: flex; align-items: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .chat-input-row textarea { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 11px 14px; font-size: .92rem; font-family: inherit; resize: none; outline: none; line-height: 1.5; max-height: 140px; overflow-y: auto; transition: border-color .2s; }
     .chat-input-row textarea:focus { border-color: var(--accent); }
     .chat-input-row textarea::placeholder { color: var(--text-dim); }
 
-    .btn-send {
-      width: 44px; height: 44px;
-      background: linear-gradient(135deg, var(--accent), #a78bfa);
-      border: none;
-      border-radius: 50%;
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      transition: opacity .2s, transform .1s;
-    }
+    .btn-send { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), #a78bfa); border: none; border-radius: 50%; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .2s, transform .1s; }
     .btn-send:hover:not(:disabled) { opacity: .85; }
     .btn-send:active:not(:disabled) { transform: scale(.93); }
     .btn-send:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* ── Model info tooltip ───────────────────────────────────── */
-    .model-badge {
-      font-size: .72rem;
-      padding: 3px 9px;
-      border-radius: 99px;
-      background: rgba(124,106,249,.18);
-      border: 1px solid rgba(124,106,249,.35);
+    /* Model info tooltip */
+    .model-badge { font-size: .72rem; padding: 3px 9px; border-radius: 99px; background: rgba(124,106,249,.18); border: 1px solid rgba(124,106,249,.35); color: var(--accent-h); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+
+    /* ── Data Panel Styles ────────────────────────────────────── */
+    .data-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .data-header h3 { font-size: 1.05rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px;}
+    .pagination { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--text-dim); }
+    
+    .table-container { flex: 1; overflow: auto; padding: 16px; }
+    .data-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+    .data-table th, .data-table td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; white-space: nowrap; color: var(--text); }
+    .data-table th { background: var(--surface); color: var(--text-dim); position: sticky; top: 0; z-index: 10; font-weight: 600; }
+    
+    /* Highlight Styles for the table */
+    .target-col { background: rgba(124,106,249,.15) !important; color: #fff; }
+    .correct-pred { color: var(--success) !important; font-weight: bold; }
+    .wrong-pred { color: var(--error) !important; font-weight: bold; }
+
+    /* Botón Explicar en la tabla */
+    .btn-explain {
+      background: transparent;
       color: var(--accent-h);
+      border: 1px solid var(--accent);
+      padding: 4px 10px;
+      border-radius: 6px;
       cursor: pointer;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 200px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-explain:hover {
+      background: var(--accent);
+      color: #fff;
     }
 
     /* ── Lightbox ─────────────────────────────────────────────── */
-    #lightbox {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.85);
-      display: none; align-items: center; justify-content: center;
-      z-index: 9999;
-      cursor: zoom-out;
-    }
+    #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 9999; cursor: zoom-out; }
     #lightbox.open { display: flex; }
-    #lightbox img {
-      max-width: 92vw; max-height: 92vh;
-      border-radius: var(--radius);
-      box-shadow: 0 8px 60px rgba(0,0,0,.7);
-    }
+    #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: var(--radius); box-shadow: 0 8px 60px rgba(0,0,0,.7); }
 
     /* ── Error banner ─────────────────────────────────────────── */
-    .error-banner {
-      background: rgba(248,113,113,.1);
-      border: 1px solid rgba(248,113,113,.35);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      color: var(--error);
-      font-size: .87rem;
-      margin-top: 16px;
-      display: none;
-    }
+    .error-banner { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.35); border-radius: var(--radius); padding: 12px 16px; color: var(--error); font-size: .87rem; margin-top: 16px; display: none; }
     .error-banner.visible { display: block; }
 
     /* Preview table */
-    .preview-table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: .78rem;
-    }
-    .preview-table th, .preview-table td {
-      border: 1px solid var(--border);
-      padding: 5px 8px;
-      text-align: left;
-      white-space: nowrap;
-      color: var(--text);
-    }
+    .preview-table { border-collapse: collapse; width: 100%; font-size: .78rem; }
+    .preview-table th, .preview-table td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; white-space: nowrap; color: var(--text); }
     .preview-table th { background: var(--surface); color: var(--text-dim); }
 
     /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .split-layout { flex-direction: column; overflow: auto;}
+      .chat-panel { max-width: 100%; min-height: 60vh; border-right: none; border-bottom: 2px solid var(--border); }
+      .data-panel { min-height: 40vh; }
+    }
     @media (max-width: 580px) {
       .setup-card, .progress-card { padding: 32px 24px; }
       .chat-header { padding: 12px 16px; }
@@ -507,9 +409,6 @@
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════════
-     SETUP SCREEN
-══════════════════════════════════════════════════════════════ -->
 <section id="screen-setup" class="screen active">
   <div class="setup-card">
     <div class="logo-row">
@@ -518,7 +417,6 @@
     </div>
     <p class="subtitle">Sube un dataset CSV, elige la variable objetivo y empieza a chatear con tu modelo.</p>
 
-    <!-- Step 1: Upload -->
     <div class="step">
       <div class="step-label"><span class="step-badge">1</span> Sube tu dataset</div>
       <div class="drop-zone" id="drop-zone">
@@ -533,7 +431,6 @@
       </div>
     </div>
 
-    <!-- Step 2: Target -->
     <div class="step">
       <div class="step-label"><span class="step-badge">2</span> Variable objetivo</div>
       <select id="target-select" disabled>
@@ -541,7 +438,6 @@
       </select>
     </div>
 
-    <!-- Initialize -->
     <button class="btn-primary" id="init-btn" disabled>🚀 Inicializar pipeline</button>
 
     <div class="error-banner" id="setup-error"></div>
@@ -549,9 +445,6 @@
 </section>
 
 
-<!-- ══════════════════════════════════════════════════════════════
-     PROGRESS SCREEN
-══════════════════════════════════════════════════════════════ -->
 <section id="screen-progress" class="screen">
   <div class="progress-card">
     <div class="spinner"></div>
@@ -565,48 +458,76 @@
 </section>
 
 
-<!-- ══════════════════════════════════════════════════════════════
-     CHAT SCREEN
-══════════════════════════════════════════════════════════════ -->
 <section id="screen-chat" class="screen">
-  <div class="chat-layout">
+  <div class="split-layout">
 
-    <!-- Header -->
-    <div class="chat-header">
-      <div class="title">
-        <span>🤖 XAI Chat Assistant</span>
-        <span class="status-dot" title="Pipeline activo"></span>
-        <span class="model-badge" id="model-badge" title=""></span>
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="title">
+          <span>🤖 Chat</span>
+          <span class="status-dot" title="Pipeline activo"></span>
+          <span class="model-badge" id="model-badge" title=""></span>
+        </div>
+        <button class="btn-ghost" id="reset-btn">🔄 Nuevo dataset</button>
       </div>
-      <button class="btn-ghost" id="reset-btn">🔄 Nuevo dataset</button>
+
+      <div class="chat-messages" id="messages">
+        <div class="welcome-msg">
+          <div class="icon">💡</div>
+          <h3>¡Pipeline listo!</h3>
+          <p>Puedes preguntar sobre las variables más importantes del modelo,<br>
+             pedir explicaciones locales para instancias específicas,<br>
+             o solicitar contraejemplos para ver qué cambiaría el resultado.</p>
+        </div>
+      </div>
+
+      <div class="chat-input-row">
+        <textarea
+          id="msg-input"
+          rows="1"
+          placeholder="Escribe tu pregunta aquí… (Enter para enviar, Shift+Enter para nueva línea)"
+        ></textarea>
+        <button class="btn-send" id="send-btn" title="Enviar" disabled>➤</button>
+      </div>
     </div>
 
-    <!-- Messages -->
-    <div class="chat-messages" id="messages">
-      <div class="welcome-msg">
-        <div class="icon">💡</div>
-        <h3>¡Pipeline listo!</h3>
-        <p>Puedes preguntar sobre las variables más importantes del modelo,<br>
-           pedir explicaciones locales para instancias específicas,<br>
-           o solicitar contraejemplos para ver qué cambiaría el resultado.</p>
+    <div class="data-panel">
+      <div class="panel-tabs">
+        <button class="tab-btn active" onclick="switchTab('explorer')">📂 Explorador</button>
+        <button class="tab-btn" onclick="switchTab('manual')">🧪 Caso Manual</button>
       </div>
-    </div>
 
-    <!-- Input -->
-    <div class="chat-input-row">
-      <textarea
-        id="msg-input"
-        rows="1"
-        placeholder="Escribe tu pregunta aquí… (Enter para enviar, Shift+Enter para nueva línea)"
-      ></textarea>
-      <button class="btn-send" id="send-btn" title="Enviar" disabled>➤</button>
+      <div id="tab-explorer" class="tab-content active">
+        <div class="data-header">
+          <h3>📊 Datos Predichos</h3>
+          <div class="pagination">
+            <button id="prev-page-btn" class="btn-ghost" disabled>Anterior</button>
+            <span id="page-info">Pág 1</span>
+            <button id="next-page-btn" class="btn-ghost" disabled>Siguiente</button>
+          </div>
+        </div>
+        <div class="table-container" id="data-table-container">
+           <p style="color: var(--text-dim); text-align: center; margin-top: 20px;">Cargando dataset...</p>
+        </div>
+      </div>
+
+      <div id="tab-manual" class="tab-content">
+        <div class="data-header">
+          <h3>✍️ Plantear Nuevo Caso</h3>
+        </div>
+        <form id="manual-case-form" class="manual-case-form">
+          <p style="color: var(--text-dim);">Esperando inicialización...</p>
+        </form>
+        <div class="form-actions" style="padding: 0 24px 24px;">
+          <button class="btn-primary" id="btn-predict-manual">✨ Predecir y Explicar Caso</button>
+        </div>
+      </div>
     </div>
 
   </div>
 </section>
 
 
-<!-- Lightbox -->
 <div id="lightbox">
   <img id="lightbox-img" src="" alt="XAI plot" />
 </div>
@@ -617,6 +538,12 @@
 let sessionId   = null;
 let isBusy      = false;
 let pollTimer   = null;
+
+// Paginación del Dataset
+let currentDataPage = 1;
+let totalDataRows   = 0;
+const DATA_PAGE_SIZE = 50;
+let currentDataRows = []; // Almacena los datos de la página actual en crudo
 
 /* ─── DOM refs ───────────────────────────────────────────────── */
 const screenSetup    = document.getElementById('screen-setup');
@@ -641,6 +568,11 @@ const msgInput   = document.getElementById('msg-input');
 const sendBtn    = document.getElementById('send-btn');
 const resetBtn   = document.getElementById('reset-btn');
 const modelBadge = document.getElementById('model-badge');
+
+const dataTableContainer = document.getElementById('data-table-container');
+const prevPageBtn = document.getElementById('prev-page-btn');
+const nextPageBtn = document.getElementById('next-page-btn');
+const pageInfo    = document.getElementById('page-info');
 
 const lightbox    = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -672,7 +604,6 @@ function onFileChosen(file) {
   }
   hideSetupError();
 
-  // Parse column names client-side from the first line (avoids a round-trip)
   const reader = new FileReader();
   reader.onload = e => {
     const firstLine = e.target.result.split(/\r?\n/)[0] || '';
@@ -684,16 +615,13 @@ function onFileChosen(file) {
     }
 
     populateTarget(cols);
-
-    // Show file meta
     previewMeta.textContent = `✅ ${file.name}  ·  ${formatBytes(file.size)}  ·  ${cols.length} columnas`;
-    previewTbl.innerHTML = '';   // clear old table
+    previewTbl.innerHTML = ''; 
     previewBox.classList.add('visible');
     initBtn.disabled = false;
   };
   reader.readAsText(file, 'utf-8');
 
-  // Also upload to server to get the HTML table preview (non-blocking)
   uploadForPreview(file);
 }
 
@@ -705,10 +633,9 @@ function uploadForPreview(file) {
     .then(data => {
       if (data.preview_html) previewTbl.innerHTML = data.preview_html;
     })
-    .catch(() => {}); // preview failure is non-critical
+    .catch(() => {});
 }
 
-/** Very small RFC-4180 first-line parser (handles quoted fields). */
 function parseCSVLine(line) {
   const cols = []; let cur = ''; let inQ = false;
   for (let i = 0; i < line.length; i++) {
@@ -781,17 +708,35 @@ async function doPoll() {
 
     const pct = Math.round((data.progress || 0) * 100);
     progressFill.style.width  = pct + '%';
-    progressPct.textContent   = pct + ' %';
+    progressPct.textContent   = pct + ' %'; 
     progressMsg.textContent   = data.message || '…';
 
     if (data.status === 'ready') {
-      // Show model badge
       const mi = (data.model_info || '').split('\n')[0];
       modelBadge.textContent = mi;
       modelBadge.title       = data.model_info || '';
 
+      // 1. Ya tenemos data.dataset_metadata gracias a la llamada principal
+      if (data.dataset_metadata) {
+        let meta = data.dataset_metadata;
+        
+        // 2. Si el backend mandó un string JSON (metadata_json), lo convertimos a objeto
+        if (typeof meta === 'string') {
+            try {
+                meta = JSON.parse(meta);
+            } catch (e) {
+                console.error("Error al parsear dataset_metadata:", e);
+            }
+        }
+        
+        // 3. Ahora sí llamamos a la función con el objeto correcto
+        generateManualForm(meta);
+      }
+
       showScreen('screen-chat');
       sendBtn.disabled = false;
+
+      loadDatasetPage(sessionId, 1);
       return;
     }
     if (data.status === 'error') {
@@ -800,11 +745,9 @@ async function doPoll() {
       initBtn.disabled = false;
       return;
     }
-
-    // Still running — poll again
     pollTimer = setTimeout(doPoll, 2000);
   } catch {
-    pollTimer = setTimeout(doPoll, 3000); // retry on network glitch
+    pollTimer = setTimeout(doPoll, 3000);
   }
 }
 
@@ -817,7 +760,6 @@ msgInput.addEventListener('keydown', e => {
 });
 sendBtn.addEventListener('click', () => { if (!isBusy) sendMessage(); });
 
-// Auto-resize textarea
 msgInput.addEventListener('input', () => {
   msgInput.style.height = 'auto';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 140) + 'px';
@@ -863,7 +805,6 @@ async function sendMessage() {
 }
 
 function appendMessage(role, text) {
-  // Remove welcome message if still present
   const wm = messagesEl.querySelector('.welcome-msg');
   if (wm) wm.remove();
 
@@ -888,15 +829,12 @@ function appendMessage(role, text) {
 function appendTyping() {
   const row = document.createElement('div');
   row.className = 'msg-row bot';
-
   const avatar = document.createElement('div');
   avatar.className = 'avatar bot';
   avatar.textContent = '🤖';
-
   const indicator = document.createElement('div');
   indicator.className = 'typing-indicator';
   indicator.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
-
   row.appendChild(avatar);
   row.appendChild(indicator);
   messagesEl.appendChild(row);
@@ -908,15 +846,11 @@ function appendPlot(url) {
   const wrap = document.createElement('div');
   wrap.className = 'plot-wrap';
   wrap.title = 'Clic para ampliar';
-
   const img = document.createElement('img');
   img.src = url;
   img.alt = 'Gráfico XAI';
   img.addEventListener('click', () => openLightbox(url));
-
   wrap.appendChild(img);
-
-  // Append to last bot bubble's parent row
   const rows = messagesEl.querySelectorAll('.msg-row.bot');
   const lastRow = rows[rows.length - 1];
   if (lastRow) lastRow.querySelector('.bubble')?.appendChild(wrap);
@@ -925,6 +859,106 @@ function appendPlot(url) {
 
 function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/* ─── Data Explorer (Pagination & Table) ─────────────────────── */
+async function loadDatasetPage(sid, page) {
+  try {
+    dataTableContainer.innerHTML = '<p style="color: var(--text-dim); text-align: center; margin-top: 20px;">Cargando datos...</p>';
+    
+    const res = await fetch(`/api/dataset/${sid}?page=${page}&size=${DATA_PAGE_SIZE}`);
+    const data = await res.json();
+    
+    if (res.ok) {
+      currentDataPage = data.page;
+      totalDataRows = data.total_rows;
+      currentDataRows = data.data; // Guardamos las filas en memoria para poder acceder a ellas
+      renderDataTable(data.columns, currentDataRows);
+      updatePaginationControls();
+    } else {
+      dataTableContainer.innerHTML = `<p style="color: var(--error); text-align: center; margin-top: 20px;">Error: ${data.detail}</p>`;
+    }
+  } catch (err) {
+    dataTableContainer.innerHTML = `<p style="color: var(--error); text-align: center; margin-top: 20px;">Error de red al cargar el dataset.</p>`;
+    console.error(err);
+  }
+}
+
+function renderDataTable(columns, dataRows) {
+  let html = '<table class="data-table"><thead><tr>';
+  
+  // Añadir cabecera extra para la acción
+  html += '<th>Acción</th>';
+
+  // Dibujar Cabeceras
+  columns.forEach(col => {
+    let extraClass = (col === "Target_Real" || col === "Target_Predicho") ? 'class="target-col"' : '';
+    html += `<th ${extraClass}>${col}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  
+  // Dibujar Filas
+  dataRows.forEach((row, index) => {
+    html += '<tr>';
+    
+    // Celda del botón de acción (usando el índice para recuperar la fila en JS)
+    html += `<td><button class="btn-explain" onclick="explainRow(${index})">✨ Explicar</button></td>`;
+
+    columns.forEach(col => {
+      let cellContent = row[col];
+      // Si el número es float largo, recortarlo visualmente
+      if (typeof cellContent === 'number' && !Number.isInteger(cellContent)) {
+        cellContent = cellContent.toFixed(4);
+      }
+      
+      let extraClass = '';
+      if (col === "Target_Predicho") {
+        extraClass = (row["Target_Predicho"] == row["Target_Real"]) ? 'class="correct-pred"' : 'class="wrong-pred"';
+      }
+      html += `<td ${extraClass}>${cellContent !== null ? cellContent : ''}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  
+  dataTableContainer.innerHTML = html;
+}
+
+function updatePaginationControls() {
+  const maxPages = Math.ceil(totalDataRows / DATA_PAGE_SIZE);
+  pageInfo.textContent = `Pág ${currentDataPage} de ${maxPages || 1}`;
+  
+  prevPageBtn.disabled = (currentDataPage <= 1);
+  nextPageBtn.disabled = (currentDataPage >= maxPages);
+}
+
+prevPageBtn.addEventListener('click', () => {
+  if (currentDataPage > 1) loadDatasetPage(sessionId, currentDataPage - 1);
+});
+
+nextPageBtn.addEventListener('click', () => {
+  const maxPages = Math.ceil(totalDataRows / DATA_PAGE_SIZE);
+  if (currentDataPage < maxPages) loadDatasetPage(sessionId, currentDataPage + 1);
+});
+
+/* ─── Botón Explicar Fila ────────────────────────────────────── */
+function explainRow(rowIndex) {
+  if (isBusy) return; // No permitir si el modelo ya está generando algo
+  
+  const rowData = currentDataRows[rowIndex];
+  if (!rowData) return;
+
+  // Construir el prompt automáticamente
+  let promptText = "Genera una explicación local detallada para la siguiente instancia. ¿Por qué el modelo hizo esta predicción en base a las siguientes variables?\n\n";
+  
+  for (const [key, value] of Object.entries(rowData)) {
+    // Si quieres excluir las columnas Target de las "features" puedes añadir un if aquí
+    promptText += `- ${key}: ${value}\n`;
+  }
+
+  // Pegarlo en el input y enviar el mensaje automáticamente
+  msgInput.value = promptText;
+  sendMessage();
 }
 
 /* ─── Lightbox ───────────────────────────────────────────────── */
@@ -941,7 +975,6 @@ resetBtn.addEventListener('click', async () => {
     sessionId = null;
   }
 
-  // Reset UI state
   fileInput.value     = '';
   fileInput._file     = null;
   targetSel.innerHTML = '<option value="">— Primero sube un CSV —</option>';
@@ -963,18 +996,95 @@ resetBtn.addEventListener('click', async () => {
 
   modelBadge.textContent = '';
   sendBtn.disabled       = true;
+  
+  // Limpiar panel de datos
+  currentDataRows = [];
+  dataTableContainer.innerHTML = '<p style="color: var(--text-dim); text-align: center; margin-top: 20px;">Cargando dataset...</p>';
+  pageInfo.textContent = 'Pág 1';
+  prevPageBtn.disabled = true;
+  nextPageBtn.disabled = true;
 
   showScreen('screen-setup');
 });
 
 /* ─── Error helpers ──────────────────────────────────────────── */
-function showSetupError(msg) {
-  setupErr.textContent = msg;
-  setupErr.classList.add('visible');
+function showSetupError(msg) { setupErr.textContent = msg; setupErr.classList.add('visible'); }
+function hideSetupError() { setupErr.classList.remove('visible'); }
+
+/* ─── Tabs Switching ─────────────────────────────────────────── */
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    document.getElementById(`tab-${tabId}`).classList.add('active');
 }
-function hideSetupError() {
-  setupErr.classList.remove('visible');
+
+/* ─── Generación del Formulario Manual ───────────────────────── */
+// Llamaremos a esta función cuando el pipeline esté "ready"
+function generateManualForm(metadata) {
+    const form = document.getElementById('manual-case-form');
+    form.innerHTML = ''; // Limpiar
+
+    const features = metadata.features || {};
+    
+    // Obtenemos las claves de las features (excluyendo el target)
+    for (const [key, description] of Object.entries(features)) {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+        
+        // Creamos un label con la descripción semántica si existe
+        const label = document.createElement('label');
+        label.textContent = key;
+        label.title = description; // Tooltip con la descripción larga
+        
+        const input = document.createElement('input');
+        input.type = 'text'; // O 'number' si quieres validar
+        input.name = key;
+        input.placeholder = "Valor...";
+        
+        group.appendChild(label);
+        group.appendChild(input);
+        form.appendChild(group);
+    }
 }
+
+/* ─── Envío del Caso Manual al Chat ──────────────────────────── */
+document.getElementById('btn-predict-manual').addEventListener('click', () => {
+    if (isBusy) return;
+
+    const form = document.getElementById('manual-case-form');
+    const formData = new FormData(form);
+    const caseData = {};
+    let isEmpty = true;
+
+    for (let [key, value] of formData.entries()) {
+        if (value.trim() !== "") {
+            caseData[key] = value;
+            isEmpty = false;
+        }
+    }
+
+    if (isEmpty) {
+        alert("Por favor, rellena al menos algunos campos.");
+        return;
+    }
+
+    // Construir el prompt para el agente
+    let promptText = "Quiero plantear un caso nuevo para el modelo. Basándote en los siguientes valores, ¿qué predeciría el modelo y por qué?\n\n";
+    for (const [key, value] of Object.entries(caseData)) {
+        promptText += `- ${key}: ${value}\n`;
+    }
+
+    msgInput.value = promptText;
+    sendMessage();
+    
+    // Volver al chat en móvil/pantallas pequeñas
+    if (window.innerWidth < 900) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+});
+
 </script>
 </body>
 </html>
