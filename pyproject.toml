@@ -21,5 +21,6 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "shap>=0.44,<0.51",
+    "skops>=0.14.0",
     "uvicorn>=0.46.0",
 ]

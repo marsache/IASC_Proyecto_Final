@@ -1,4 +1,5 @@
 import json
+import os
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, mean_squared_error, r2_score
 
@@ -11,6 +12,8 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
+
+from skops.io import load, dump
 
 # 1. Crear el Registro de Modelos Permitidos
 # Mapea el string que devuelve el LLM a la clase constructora de Scikit-Learn
@@ -144,6 +147,47 @@ def generate_model_info(model, X_test: np.ndarray, y_test: np.ndarray, task_type
 
     # Convertimos la lista en un solo string con saltos de línea
     return "\n".join(info_lines)
+
+def try_load_model(csv_path: str):
+    dataset_dir = os.path.dirname(csv_path)
+    dataset_filename = os.path.basename(csv_path)
+    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .xlsx, etc.)
+    
+    model_file_path = os.path.join(dataset_dir, f"{dataset_name}_model.skops")
+    metadata_file_path = os.path.join(dataset_dir, f"{dataset_name}_metadata_model.json")
+
+    exists = os.path.exists(metadata_file_path)
+
+
+    if not exists:
+        return False, None, ""
+    else:
+        model = load(model_file_path, trusted = []) 
+        with open(metadata_file_path, 'r', encoding='utf-8') as f:
+            dataset_metadata_json = f.read()
+
+        task_type = json.loads(dataset_metadata_json)["task_type"]
+
+        return True, model, task_type
+    
+
+def save_model(csv_path : str, task_type, model):
+    dataset_dir = os.path.dirname(csv_path)
+    dataset_filename = os.path.basename(csv_path)
+    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .xlsx, etc.)
+    
+    model_file_path = os.path.join(dataset_dir, f"{dataset_name}_model.skops")
+    metadata_file_path = os.path.join(dataset_dir, f"{dataset_name}_metadata_model.json")
+
+    model_metadata = {
+        "task_type" : task_type,
+        "model_type" : str(type(model))
+        }
+
+    with open(metadata_file_path, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(model_metadata, indent=4, ensure_ascii=False))
+
+    dump(model, model_file_path)
 
 
 # # ==========================================
