@@ -79,7 +79,7 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
             progress=0.15,
             message="Preprocesando datos y generando perfil semántico…",
         )
-        X_train, X_test, y_train, y_test, metadata_json, scaler = preprocess_dataset(
+        X_train, X_test, y_train, y_test, metadata_json, scaler, df = preprocess_dataset(
             df, csv_path, target
         )
         metadata = json.loads(metadata_json)
@@ -106,11 +106,17 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
             best = trained_models[0]
             model = best["model_object"]
 
+            _update_session(session_id, progress=0.65, message="Guardando modelos…")
+
             save_model(csv_path, task_type, model)
+
+            _update_session(session_id, progress=0.70, message="Modelos guardados")
+
 
         _update_session(
             session_id, progress=0.80, message="Inicializando herramientas XAI…"
         )
+
         model_info = generate_model_info(model, X_test, y_test, task_type)
 
         df_clean = df.dropna().reset_index(drop=True)
@@ -160,6 +166,7 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
         )
 
     except Exception as exc:
+        print(exc)
         _update_session(
             session_id,
             status="error",
