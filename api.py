@@ -30,6 +30,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from langchain_community.chat_message_histories import ChatMessageHistory
+
 # Make sure relative imports (config, utils, …) resolve correctly.
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -54,6 +56,12 @@ os.makedirs(_STATIC_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 _sessions: dict = {}
 _sessions_lock = Lock()
+
+store = {}
+def get_history(session_id: str):
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
 
 
 def _update_session(session_id: str, **kwargs) -> None:
@@ -131,7 +139,7 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
         _update_session(
             session_id, progress=0.95, message="Configurando agente XAI…"
         )
-        agent_executor = setup_xai_agent(metadata, model_info, toolkit)
+        agent_executor = setup_xai_agent(metadata, model_info, toolkit, get_history)
 
         # --- NUEVO: Generar dataset aumentado para el explorador ---
         _update_session(
@@ -327,7 +335,7 @@ def chat(body: ChatRequest) -> JSONResponse:
     agent = session["agent"]
 
     try:
-        result = agent.invoke({"input": body.message.strip()})
+        result = agent.invoke({"input": body.message.strip()}, config = {"configurable": {"session_id": body.session_id}})
         response_text = result.get("output", str(result))
 
         # Collect the first valid plot produced during this turn

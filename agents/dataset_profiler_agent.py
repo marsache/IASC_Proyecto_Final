@@ -56,9 +56,10 @@ def generate_dataset_profile(df: pd.DataFrame, target: str) -> str:
                 "dataset_description": "Breve descripción inferida",
                 "target_description": "Qué significa la variable objetivo",
                 "features": {
-                    "nombre_de_columna": "Descripción semántica y valores típicos"
+                    "nombre_de_columna": "Descripción semántica y valores típicos."
                 }
-            }"""
+            }
+            """
         })
         # LangChain devuelve un diccionario de Python gracias al JsonOutputParser. 
         # Lo convertimos a string JSON para mantener la compatibilidad con el resto de tu código.
