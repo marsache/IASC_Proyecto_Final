@@ -4,68 +4,140 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
+# Mapea el string que devuelve el LLM a la clase constructora correspondiente
+TABULAR_REGISTRY = [
+    # --- TABULARES: Clasificación ---
+    "RandomForestClassifier",
+    "LogisticRegression",
+    "GradientBoostingClassifier",
+    "SVC",
+    
+    # --- TABULARES: Regresión ---
+    "RandomForestRegressor",
+    "LinearRegression",
+    "GradientBoostingRegressor",
+    "SVR",
+]
+
+IMAGE_REGISTRY = [
+        # --- IMÁGENES: Keras / Deep Learning ---
+    # Nota: En tu función de entrenamiento, estas clases necesitarán ser tratadas 
+    # añadiendo un 'GlobalAveragePooling2D' y una capa 'Dense' con softmax.
+    "MobileNetV2",
+    "ResNet50",
+    "VGG16",
+    "EfficientNetB0",
+    "SimpleCNN"
+]
+
 def recommend_best_models(dataset_metadata_json: str) -> str:
     """
-    Agente Selector de Modelos: Analiza los metadatos del dataset y devuelve
-    los 2 mejores modelos de Machine Learning para entrenar, incluyendo parámetros.
+    Agente Enrutador y Selectores: Analiza los metadatos del dataset, 
+    detecta el tipo y deriva la tarea a un agente especialista (Tabular o Imagen)
+    para devolver los 2 mejores modelos/arquitecturas.
     """
-    # 1. Configurar el parser de JSON
     parser = JsonOutputParser()
+    llm = ChatOllama(model="llama3", temperature=0, format="json")
 
-    # 2. Definir el System Prompt con instrucciones muy estrictas para Llama 3 8B
-    # 2. Definir el System Prompt con instrucciones muy estrictas para Llama 3 8B
-    system_prompt = """Eres un Científico de Datos experto (Data Scientist) especializado en Scikit-Learn.
-    Tu tarea es analizar los metadatos de un dataset y seleccionar los 2 mejores algoritmos clásicos de Machine Learning para entrenar.
+    # 1. Leer los metadatos para tomar la decisión de enrutamiento
+    metadata = json.loads(dataset_metadata_json)
+    dataset_type = metadata.get("dataset_type", "tabular") # Por defecto tabular si no existe
 
-    INSTRUCCIONES:
-    1. Determina si el problema es de 'classification' o 'regression' basándote en la 'target_description'.
-    2. Elige los 2 algoritmos de Scikit-Learn más apropiados dadas las características (lineales, basados en árboles, SVM, etc.).
-    3. Para cada modelo, sugiere 2 o 3 hiperparámetros clave con valores recomendados y seguros.
+    # 2. Definir los Prompts de los Agentes Especialistas
     
-    FORMATO DE SALIDA ESTRICTO:
-    Devuelve ÚNICAMENTE un JSON válido siguiendo exactamente esta estructura:
-    {{
-        "task_type": "classification o regression",
-        "models": [
-            {{
-                "name": "NombreClaseScikitLearn (ej. RandomForestClassifier, SVR, LogisticRegression)",
-                "reasoning": "Explicación breve de por qué es adecuado",
-                "hyperparameters": {{
-                    "nombre_parametro": "valor recomendado (número o string)"
-                }}
-            }},
-            {{
-                "name": "NombreClaseScikitLearn2",
-                "reasoning": "Explicación breve",
-                "hyperparameters": {{
-                    "nombre_parametro": "valor recomendado (número o string)"
-                }}
-            }}
-        ]
-    }}
-    """
+    # --- AGENTE EXPERTO EN DATOS TABULARES ---
+    if dataset_type == "tabular":
+        system_prompt = """Eres un Científico de Datos experto especializado en Scikit-Learn (Machine Learning clásico).
+        Tu tarea es analizar los metadatos de un dataset tabular y seleccionar los 2 mejores algoritmos para entrenar.
 
-    # 3. Crear el Prompt Template
+        INSTRUCCIONES CRÍTICAS:
+        1. Determina si la tarea es 'classification' o 'regression' basándote en los metadatos.
+        2. Selecciona 2 algoritmos clásicos de Scikit-Learn (ej. RandomForestClassifier, SVC, GradientBoostingRegressor, etc.).
+        3. Sugiere 2 o 3 hiperparámetros clásicos (ej. n_estimators, max_depth, C).
+
+        REGISTRO DE MODELOS:
+        {TABULAR_REGISTRY}
+
+        FORMATO DE SALIDA ESTRICTO:
+        Devuelve ÚNICAMENTE un JSON válido siguiendo exactamente esta estructura, sin texto adicional:
+        {{
+            "task_type": "classification o regression",
+            "models": [
+                {{
+                    "name": "NombreClaseExacto",
+                    "reasoning": "Explicación breve",
+                    "hyperparameters": {{ "parametro": "valor" }}
+                }},
+                {{
+                    "name": "NombreClaseExacto2",
+                    "reasoning": "Explicación breve",
+                    "hyperparameters": {{ "parametro": "valor" }}
+                }}
+            ]
+        }}
+        """
+
+    # --- AGENTE EXPERTO EN IMÁGENES ---
+    elif dataset_type == "image":
+        system_prompt = """Eres un Ingeniero de Machine Learning experto especializado en TensorFlow/Keras (Visión por Computador y Deep Learning).
+        Tu tarea es analizar los metadatos de un dataset de imágenes y seleccionar las 2 mejores arquitecturas para entrenar.
+
+        INSTRUCCIONES CRÍTICAS:
+        1. La tarea será obligatoriamente 'image_classification'.
+        2. Selecciona 2 arquitecturas de Keras apropiadas para Transfer Learning o desde cero (ej. MobileNetV2, ResNet50, EfficientNetB0, SimpleCNN).
+        3. Sugiere 2 o 3 hiperparámetros de entrenamiento de Deep Learning (ej. learning_rate, batch_size, epochs).
+
+        REGISTRO DE MODELOS:
+        {IMAGE_REGISTRY}
+
+        FORMATO DE SALIDA ESTRICTO:
+        Devuelve ÚNICAMENTE un JSON válido siguiendo exactamente esta estructura, sin texto adicional:
+        {{
+            "task_type": "image_classification",
+            "models": [
+                {{
+                    "name": "NombreClaseExacto",
+                    "reasoning": "Explicación breve",
+                    "hyperparameters": {{ "parametro": "valor" }}
+                }},
+                {{
+                    "name": "NombreClaseExacto2",
+                    "reasoning": "Explicación breve",
+                    "hyperparameters": {{ "parametro": "valor" }}
+                }}
+            ]
+        }}
+        """
+    else:
+        raise ValueError(f"Tipo de dataset no reconocido: {dataset_type}")
+
+    # 3. Construir y ejecutar la cadena para el agente seleccionado
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         ("human", "METADATOS DEL DATASET:\n{metadata}")
     ])
 
-    # 4. Instanciar el modelo LLM local (Ollama)
-    # temperature=0 para asegurar que recomiende lo más lógico y no alucine parámetros
-    llm = ChatOllama(model="llama3", temperature=0, format="json")
-
-    # 5. Componer la cadena (Pipeline LCEL)
     chain = prompt | llm | parser
 
-    # 6. Ejecutar la cadena
     try:
         response_dict = chain.invoke({
-            "metadata": dataset_metadata_json
+            "metadata": dataset_metadata_json,
+            "IMAGE_REGISTRY": IMAGE_REGISTRY,
+            "TABULAR_REGISTRY": TABULAR_REGISTRY
         })
-        # Devolvemos el string JSON formateado
         return json.dumps(response_dict, indent=4, ensure_ascii=False)
         
     except Exception as e:
-        print(f"Error ejecutando el Agente Selector de Modelos: {e}")
-        return "{}"
+        print(f"Error ejecutando el Agente Selector de Modelos ({dataset_type}): {e}")
+        # Fallbacks específicos según el tipo de fallo
+        if dataset_type == "tabular":
+            fallback = {
+                "task_type": "classification",
+                "models": [{"name": "RandomForestClassifier", "reasoning": "Fallback seguro.", "hyperparameters": {"n_estimators": 100}}]
+            }
+        else:
+            fallback = {
+                "task_type": "image_classification",
+                "models": [{"name": "SimpleCNN", "reasoning": "Fallback seguro.", "hyperparameters": {"learning_rate": 0.001, "epochs": 10}}]
+            }
+        return json.dumps(fallback)

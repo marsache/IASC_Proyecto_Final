@@ -405,6 +405,75 @@
       .chat-input-row { padding: 12px 16px; }
       .msg-row { max-width: 92%; }
     }
+
+    /* ── Image Grid Styles (NUEVO) ────────────────────────────── */
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      padding: 16px;
+    }
+    .image-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .image-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+      border-color: var(--accent);
+    }
+    .image-card-img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      background: var(--surface2);
+      cursor: zoom-in;
+    }
+    .image-card-info {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .img-target-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.75rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-real {
+      background: rgba(124,106,249,0.15);
+      color: var(--text);
+      border: 1px solid rgba(124,106,249,0.3);
+    }
+    .badge-pred-correct {
+      background: rgba(74,222,128,0.15);
+      color: var(--success);
+      border: 1px solid rgba(74,222,128,0.3);
+    }
+    .badge-pred-wrong {
+      background: rgba(248,113,113,0.15);
+      color: var(--error);
+      border: 1px solid rgba(248,113,113,0.3);
+    }
+    .image-card .btn-explain {
+      width: 100%;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -417,26 +486,26 @@
     </div>
     <p class="subtitle">Sube un dataset CSV, elige la variable objetivo y empieza a chatear con tu modelo.</p>
 
-    <div class="step">
-      <div class="step-label"><span class="step-badge">1</span> Sube tu dataset</div>
-      <div class="drop-zone" id="drop-zone">
-        <input type="file" id="file-input" accept=".csv" />
-        <div class="drop-icon">📂</div>
-        <div class="drop-main">Arrastra un archivo CSV aquí</div>
-        <div class="drop-hint">o haz clic para seleccionarlo</div>
-      </div>
-      <div class="preview-box" id="preview-box">
-        <div class="meta" id="preview-meta"></div>
-        <div id="preview-table-wrap" style="overflow-x:auto"></div>
-      </div>
+  <div class="step">
+    <div class="step-label"><span class="step-badge">1</span> Sube tu dataset</div>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".csv,.zip" />
+      <div class="drop-icon">📂</div>
+      <div class="drop-main">Arrastra un archivo CSV o un ZIP (imágenes) aquí</div>
+      <div class="drop-hint">o haz clic para seleccionarlo</div>
     </div>
+    <div class="preview-box" id="preview-box">
+      <div class="meta" id="preview-meta"></div>
+      <div id="preview-table-wrap" style="overflow-x:auto"></div>
+    </div>
+  </div>
 
-    <div class="step">
-      <div class="step-label"><span class="step-badge">2</span> Variable objetivo</div>
-      <select id="target-select" disabled>
-        <option value="">— Primero sube un CSV —</option>
-      </select>
-    </div>
+  <div class="step">
+    <div class="step-label"><span class="step-badge">2</span> Variable objetivo</div>
+    <select id="target-select" disabled>
+      <option value="">— Primero sube un CSV o ZIP —</option>
+    </select>
+  </div>
 
     <button class="btn-primary" id="init-btn" disabled>🚀 Inicializar pipeline</button>
 
@@ -597,43 +666,73 @@ fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) onFileChosen(fileInput.files[0]);
 });
 
+/* ─── MODIFICA EL FILE HANDLING EN TU JAVASCRIPT ────────────────────────── */
+
 function onFileChosen(file) {
-  if (!file.name.toLowerCase().endsWith('.csv')) {
-    showSetupError('Solo se aceptan archivos .csv');
+  const isCSV = file.name.toLowerCase().endsWith('.csv');
+  const isZIP = file.name.toLowerCase().endsWith('.zip');
+
+  if (!isCSV && !isZIP) {
+    showSetupError('Solo se aceptan archivos .csv o .zip');
     return;
   }
   hideSetupError();
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    const firstLine = e.target.result.split(/\r?\n/)[0] || '';
-    const cols = parseCSVLine(firstLine);
+  if (isCSV) {
+    // Lógica original para CSV
+    const reader = new FileReader();
+    reader.onload = e => {
+      const firstLine = e.target.result.split(/\r?\n/)[0] || '';
+      const cols = parseCSVLine(firstLine);
 
-    if (cols.length === 0) {
-      showSetupError('No se pudo leer ninguna columna del CSV.');
-      return;
-    }
+      if (cols.length === 0) {
+        showSetupError('No se pudo leer ninguna columna del CSV.');
+        return;
+      }
 
-    populateTarget(cols);
-    previewMeta.textContent = `✅ ${file.name}  ·  ${formatBytes(file.size)}  ·  ${cols.length} columnas`;
-    previewTbl.innerHTML = ''; 
+      populateTarget(cols);
+      previewMeta.textContent = `✅ ${file.name}  ·  ${formatBytes(file.size)}  ·  ${cols.length} columnas`;
+      previewTbl.innerHTML = ''; 
+      previewBox.classList.add('visible');
+      initBtn.disabled = false;
+    };
+    reader.readAsText(file, 'utf-8');
+    uploadForPreview(file, isZIP);
+
+  } else if (isZIP) {
+    // Nueva lógica para imágenes (ZIP)
+    targetSel.innerHTML = '<option value="label" selected>label (Automático para imágenes)</option>';
+    targetSel.disabled = true; // Bloqueamos el selector, la variable siempre será 'label'
+    
+    previewMeta.textContent = `✅ ${file.name}  ·  ${formatBytes(file.size)}  ·  Analizando ZIP...`;
+    previewTbl.innerHTML = '<em>Extrayendo y analizando imágenes en el servidor... ⏳</em>';
     previewBox.classList.add('visible');
-    initBtn.disabled = false;
-  };
-  reader.readAsText(file, 'utf-8');
-
-  uploadForPreview(file);
+    initBtn.disabled = true; // Deshabilitado hasta que el backend confirme que el ZIP es válido
+    
+    uploadForPreview(file, isZIP);
+  }
 }
 
-function uploadForPreview(file) {
+// Modificamos la función para aceptar el flag isZIP
+function uploadForPreview(file, isZIP = false) {
   const fd = new FormData();
   fd.append('file', file);
+  
   fetch('/api/upload', { method: 'POST', body: fd })
     .then(r => r.json())
     .then(data => {
-      if (data.preview_html) previewTbl.innerHTML = data.preview_html;
+      if (data.preview_html) {
+          previewTbl.innerHTML = data.preview_html;
+      }
+      // Si es un ZIP y el backend respondió correctamente, habilitamos el botón
+      if (isZIP && data.is_image) {
+          initBtn.disabled = false;
+          previewMeta.textContent = `✅ ${file.name}  ·  ${formatBytes(file.size)}  ·  Dataset de Imágenes`;
+      }
     })
-    .catch(() => {});
+    .catch(() => {
+        showSetupError('Error al comunicarse con el servidor al previsualizar el archivo.');
+    });
 }
 
 function parseCSVLine(line) {
@@ -898,37 +997,78 @@ async function loadDatasetPage(sid, page) {
     console.error(err);
   }
 }
+// --- FUNCIONES DE RENDERIZADO ADAPTATIVO ---
 
 function renderDataTable(columns, dataRows) {
+  // 1. Detectar si el dataset es de imágenes buscando columnas clave
+  const imageKeywords = ["image", "image_path", "file_path", "path", "url"];
+  const imageColumn = columns.find(col => imageKeywords.includes(col.toLowerCase()));
+
+  // 2. Enrutar a la vista correcta
+  if (imageColumn) {
+    renderImageGrid(columns, dataRows, imageColumn);
+  } else {
+    renderStandardTable(columns, dataRows);
+  }
+}
+
+function renderImageGrid(columns, dataRows, imageColumn) {
+  let html = '<div class="image-grid">';
+
+  dataRows.forEach((row, index) => {
+    const realTarget = row["Target_Real"] ?? "N/A";
+    const predTarget = row["Target_Predicho"] ?? "N/A";
+    
+    // Determinar si acertó o falló para los colores
+    const isCorrect = String(realTarget) === String(predTarget);
+    const predClass = isCorrect ? 'badge-pred-correct' : 'badge-pred-wrong';
+    
+    // Asumimos que la columna de imagen contiene una ruta que el backend puede servir
+    // Si el backend expone las imágenes estáticas, asegúrate de que la ruta sea correcta (ej. /static/...)
+    const imagePath = row[imageColumn];
+
+    html += `
+      <div class="image-card">
+        <img class="image-card-img" src="${imagePath}" alt="Muestra ${index}" onclick="openLightbox('${imagePath}')" onerror="this.src='https://via.placeholder.com/150?text=No+Image'">
+        <div class="image-card-info">
+          <div class="img-target-row">
+            <span class="badge badge-real">Real: ${realTarget}</span>
+            <span class="badge ${predClass}">Pred: ${predTarget}</span>
+          </div>
+          <button class="btn-explain" onclick="explainRow(${index})">✨ Explicar</button>
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  dataTableContainer.innerHTML = html;
+}
+
+function renderStandardTable(columns, dataRows) {
   let html = '<table class="data-table"><thead><tr>';
   
-  // Añadir cabecera extra para la acción
   html += '<th>Acción</th>';
 
-  // Dibujar Cabeceras
   columns.forEach(col => {
     let extraClass = (col === "Target_Real" || col === "Target_Predicho") ? 'class="target-col"' : '';
     html += `<th ${extraClass}>${col}</th>`;
   });
   html += '</tr></thead><tbody>';
   
-  // Dibujar Filas
   dataRows.forEach((row, index) => {
     html += '<tr>';
-    
-    // Celda del botón de acción (usando el índice para recuperar la fila en JS)
     html += `<td><button class="btn-explain" onclick="explainRow(${index})">✨ Explicar</button></td>`;
 
     columns.forEach(col => {
       let cellContent = row[col];
-      // Si el número es float largo, recortarlo visualmente
       if (typeof cellContent === 'number' && !Number.isInteger(cellContent)) {
         cellContent = cellContent.toFixed(4);
       }
       
       let extraClass = '';
       if (col === "Target_Predicho") {
-        extraClass = (row["Target_Predicho"] == row["Target_Real"]) ? 'class="correct-pred"' : 'class="wrong-pred"';
+        extraClass = (String(row["Target_Predicho"]) === String(row["Target_Real"])) ? 'class="correct-pred"' : 'class="wrong-pred"';
       }
       html += `<td ${extraClass}>${cellContent !== null ? cellContent : ''}</td>`;
     });
@@ -937,6 +1077,36 @@ function renderDataTable(columns, dataRows) {
   html += '</tbody></table>';
   
   dataTableContainer.innerHTML = html;
+}
+
+/* ─── Botón Explicar Fila (Adaptado) ─────────────────────────── */
+function explainRow(rowIndex) {
+  if (isBusy) return;
+  
+  const rowData = currentDataRows[rowIndex];
+  if (!rowData) return;
+
+  // Detectar si estamos explicando una imagen o datos tabulares
+  const imageKeywords = ["image", "image_path", "file_path", "path", "url"];
+  const imageColumn = Object.keys(rowData).find(col => imageKeywords.includes(col.toLowerCase()));
+
+  let promptText = "";
+
+  if (imageColumn) {
+    // Es una imagen
+    const path = rowData[imageColumn];
+    const target = rowData["Target_Predicho"] || "desconocido";
+    promptText = `Genera una explicación local detallada para la imagen ubicada en '${path}'. ¿Por qué el modelo la clasificó como '${target}'? Muestra el mapa de calor de superpíxeles o explicador visual correspondiente.`;
+  } else {
+    // Son datos tabulares
+    promptText = "Genera una explicación local detallada para la siguiente instancia. ¿Por qué el modelo hizo esta predicción en base a las siguientes variables?\n\n";
+    for (const [key, value] of Object.entries(rowData)) {
+      promptText += `- ${key}: ${value}\n`;
+    }
+  }
+
+  msgInput.value = promptText;
+  sendMessage();
 }
 
 function updatePaginationControls() {
@@ -955,26 +1125,6 @@ nextPageBtn.addEventListener('click', () => {
   const maxPages = Math.ceil(totalDataRows / DATA_PAGE_SIZE);
   if (currentDataPage < maxPages) loadDatasetPage(sessionId, currentDataPage + 1);
 });
-
-/* ─── Botón Explicar Fila ────────────────────────────────────── */
-function explainRow(rowIndex) {
-  if (isBusy) return; // No permitir si el modelo ya está generando algo
-  
-  const rowData = currentDataRows[rowIndex];
-  if (!rowData) return;
-
-  // Construir el prompt automáticamente
-  let promptText = "Genera una explicación local detallada para la siguiente instancia. ¿Por qué el modelo hizo esta predicción en base a las siguientes variables?\n\n";
-  
-  for (const [key, value] of Object.entries(rowData)) {
-    // Si quieres excluir las columnas Target de las "features" puedes añadir un if aquí
-    promptText += `- ${key}: ${value}\n`;
-  }
-
-  // Pegarlo en el input y enviar el mensaje automáticamente
-  msgInput.value = promptText;
-  sendMessage();
-}
 
 /* ─── Lightbox ───────────────────────────────────────────────── */
 function openLightbox(src) {

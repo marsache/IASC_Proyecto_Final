@@ -13,21 +13,36 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVR
 
-from skops.io import load, dump
+# Importes de Keras para Transfer Learning
+from keras.applications import MobileNetV2, ResNet50, VGG16, EfficientNetB0
+import tensorflow as tf
 
-# 1. Crear el Registro de Modelos Permitidos
-# Mapea el string que devuelve el LLM a la clase constructora de Scikit-Learn
+from skops.io import load as skops_load, dump
+import tensorflow as tf
+
+
+# Mapea el string que devuelve el LLM a la clase constructora correspondiente
 MODEL_REGISTRY = {
-    # Clasificación
+    # --- TABULARES: Clasificación ---
     "RandomForestClassifier": RandomForestClassifier,
     "LogisticRegression": LogisticRegression,
     "GradientBoostingClassifier": GradientBoostingClassifier,
     "SVC": SVC,
-    # Regresión
+    
+    # --- TABULARES: Regresión ---
     "RandomForestRegressor": RandomForestRegressor,
     "LinearRegression": LinearRegression,
     "GradientBoostingRegressor": GradientBoostingRegressor,
-    "SVR": SVR
+    "SVR": SVR,
+
+    # --- IMÁGENES: Keras / Deep Learning ---
+    # Nota: En tu función de entrenamiento, estas clases necesitarán ser tratadas 
+    # añadiendo un 'GlobalAveragePooling2D' y una capa 'Dense' con softmax.
+    "MobileNetV2": MobileNetV2,
+    "ResNet50": ResNet50,
+    "VGG16": VGG16,
+    "EfficientNetB0": EfficientNetB0,
+    "SimpleCNN": "SimpleCNN" # Flag para construir una red convolucional secuencial personalizada
 }
 
 def build_and_train_recommended_models(recommendations_json: str, X_train, y_train):
@@ -59,52 +74,80 @@ def build_and_train_recommended_models(recommendations_json: str, X_train, y_tra
             continue
             
         model_class = MODEL_REGISTRY[model_name]
-        
-        # Excepción específica para SVC para asegurar que funcione con explicadores locales (XAI)
-        if model_name == "SVC":
-            params["probability"] = True
+        task_type = recommendations.get("task_type", "")
+        # Ejemplo mental de cómo deberás procesarlo luego
+        if task_type == "image_classification":
+            base_model = MODEL_REGISTRY[model_name](weights='imagenet', include_top=False, input_shape=(128, 128, 3))
             
-        # 3. Instanciar y Entrenar
-        try:
-            # El operador ** desempaqueta el diccionario en argumentos nombrados
-            # Equivalente a: RandomForestClassifier(n_estimators=100, max_depth=5)
-            model_instance = model_class(**params)
+            base_model.trainable = False 
             
-            print(f"Entrenando {model_name}...")
-            model_instance.fit(X_train, y_train)
-            
-            # Guardamos un diccionario con el modelo entrenado y su información
-            trained_models.append({
-                "name": model_name,
-                "model_object": model_instance,
-                "reasoning": model_info.get("reasoning", "Sin justificación provista.")
-            })
-            print("Entrenamiento completado.")
-            
-        except Exception as e:
-            # Mecanismo de seguridad: Si el LLM alucina un parámetro que la clase no acepta
-            # (ej. sugiere 'learning_rate' para un RandomForest), Scikit-Learn lanzará un error.
-            print(f"Error al instanciar {model_name} con parámetros {params}.")
-            print(f"Detalle del error: {e}")
-            
-            print(f"Intentando entrenar {model_name} con parámetros por defecto (Fallback)...")
-            try:
-                # Fallback: instanciar sin parámetros
-                model_fallback = model_class()
-                # Forzar probability=True en SVC incluso en el fallback
-                if model_name == "SVC":
-                    model_fallback = model_class(probability=True)
-                    
-                model_fallback.fit(X_train, y_train)
-                trained_models.append({
-                    "name": f"{model_name} (Default Params)",
-                    "model_object": model_fallback,
-                    "reasoning": "Fallback tras error de parámetros del LLM."
-                })
-                print("Entrenamiento de fallback completado.")
-            except Exception as e_fallback:
-                print(f"Fallo crítico en fallback: {e_fallback}")
+            num_classes = len(np.unique(y_train))
+
+            # Construir cabecera
+            model = tf.keras.Sequential([
+                base_model,
+                tf.keras.layers.GlobalAveragePooling2D(),
                 
+                tf.keras.layers.Dense(num_classes, activation='softmax')
+            ])
+            
+            model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=params.get('learning_rate', 0.001)),
+                        loss='sparse_categorical_crossentropy',
+                        metrics=['accuracy'])
+            
+            model.fit(X_train, y_train, epochs=params.get('epochs', 10), batch_size=params.get('batch_size', 32))
+        
+            trained_models.append({
+                    "name": model_name,
+                    "model_object": model,
+                    "reasoning": model_info.get("reasoning", "Sin justificación provista.")
+                })
+        else:
+            # Excepción específica para SVC para asegurar que funcione con explicadores locales (XAI)
+            if model_name == "SVC":
+                params["probability"] = True
+                
+            # 3. Instanciar y Entrenar
+            try:
+                # El operador ** desempaqueta el diccionario en argumentos nombrados
+                # Equivalente a: RandomForestClassifier(n_estimators=100, max_depth=5)
+                model_instance = model_class(**params)
+                
+                print(f"Entrenando {model_name}...")
+                model_instance.fit(X_train, y_train)
+                
+                # Guardamos un diccionario con el modelo entrenado y su información
+                trained_models.append({
+                    "name": model_name,
+                    "model_object": model_instance,
+                    "reasoning": model_info.get("reasoning", "Sin justificación provista.")
+                })
+                print("Entrenamiento completado.")
+                
+            except Exception as e:
+                # Mecanismo de seguridad: Si el LLM alucina un parámetro que la clase no acepta
+                # (ej. sugiere 'learning_rate' para un RandomForest), Scikit-Learn lanzará un error.
+                print(f"Error al instanciar {model_name} con parámetros {params}.")
+                print(f"Detalle del error: {e}")
+                
+                print(f"Intentando entrenar {model_name} con parámetros por defecto (Fallback)...")
+                try:
+                    # Fallback: instanciar sin parámetros
+                    model_fallback = model_class()
+                    # Forzar probability=True en SVC incluso en el fallback
+                    if model_name == "SVC":
+                        model_fallback = model_class(probability=True)
+                        
+                    model_fallback.fit(X_train, y_train)
+                    trained_models.append({
+                        "name": f"{model_name} (Default Params)",
+                        "model_object": model_fallback,
+                        "reasoning": "Fallback tras error de parámetros del LLM."
+                    })
+                    print("Entrenamiento de fallback completado.")
+                except Exception as e_fallback:
+                    print(f"Fallo crítico en fallback: {e_fallback}")
+                    
     return trained_models
 
 def generate_model_info(model, X_test: np.ndarray, y_test: np.ndarray, task_type: str = "classification") -> str:
@@ -146,49 +189,93 @@ def generate_model_info(model, X_test: np.ndarray, y_test: np.ndarray, task_type
         info_lines.append("- Tipo de tarea no reconocida para calcular métricas.")
 
     # Convertimos la lista en un solo string con saltos de línea
-    return "\n".join(info_lines)
+    return "\n".join(info_lines), y_pred
 
-def try_load_model(csv_path: str):
-    dataset_dir = os.path.dirname(csv_path)
-    dataset_filename = os.path.basename(csv_path)
-    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .xlsx, etc.)
+def try_load_model(dataset_path: str):
+    dataset_dir = os.path.dirname(dataset_path)
+    dataset_filename = os.path.basename(dataset_path)
+    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión
     
-    model_file_path = os.path.join(dataset_dir, f"{dataset_name}_model.skops")
     metadata_file_path = os.path.join(dataset_dir, f"{dataset_name}_metadata_model.json")
-
-    exists = os.path.exists(metadata_file_path)
-
-
-    if not exists:
+    
+    # 1. Si no existe el JSON de metadatos, no podemos saber qué modelo es
+    if not os.path.exists(metadata_file_path):
         return False, None, ""
-    else:
-        model = load(model_file_path, trusted = []) 
+        
+    # 2. Leer primero los metadatos
+    try:
         with open(metadata_file_path, 'r', encoding='utf-8') as f:
-            dataset_metadata_json = f.read()
-
-        task_type = json.loads(dataset_metadata_json)["task_type"]
-
+            metadata = json.load(f)
+    except Exception as e:
+        print(f"Error al leer los metadatos del modelo: {e}")
+        return False, None, ""
+        
+    task_type = metadata.get("task_type", "")
+    
+    # 3. Determinar el nombre del archivo del modelo.
+    # Usamos la clave 'model_file' que guardamos en la función save_model.
+    # Si por compatibilidad con versiones anteriores no existe, lo deducimos.
+    model_filename = metadata.get("model_file")
+    if not model_filename:
+        extension = ".keras" if task_type == "image_classification" else ".skops"
+        model_filename = f"{dataset_name}_model{extension}"
+        
+    model_file_path = os.path.join(dataset_dir, model_filename)
+    
+    # 4. Comprobar que el archivo del modelo realmente existe
+    if not os.path.exists(model_file_path):
+        return False, None, ""
+        
+    # 5. Cargar el modelo con la librería correcta según el task_type
+    try:
+        if task_type == "image_classification":
+            # Modelo Keras / Deep Learning
+            model = tf.keras.models.load_model(model_file_path)
+        else:
+            # Modelo Scikit-Learn tabular clásico
+            # Nota: 'trusted' debe configurarse según tus necesidades de seguridad
+            model = skops_load(model_file_path, trusted=[]) 
+            
         return True, model, task_type
-    
+        
+    except Exception as e:
+        print(f"Error al cargar el archivo del modelo: {e}")
+        return False, None, ""
 
-def save_model(csv_path : str, task_type, model):
-    dataset_dir = os.path.dirname(csv_path)
-    dataset_filename = os.path.basename(csv_path)
-    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .xlsx, etc.)
+def save_model(dataset_path: str, task_type: str, model):
+    dataset_dir = os.path.dirname(dataset_path)
+    dataset_filename = os.path.basename(dataset_path)
+    dataset_name = os.path.splitext(dataset_filename)[0] # Quita la extensión (.csv, .zip, etc.)
     
-    model_file_path = os.path.join(dataset_dir, f"{dataset_name}_model.skops")
+    # 1. Determinar si es un modelo de imágenes (Keras) o tabular (Scikit-Learn)
+    is_image_task = (task_type == "image_classification")
+    
+    # 2. Asignar la extensión correcta
+    extension = ".keras" if is_image_task else ".skops"
+    model_filename = f"{dataset_name}_model{extension}"
+    
+    model_file_path = os.path.join(dataset_dir, model_filename)
     metadata_file_path = os.path.join(dataset_dir, f"{dataset_name}_metadata_model.json")
 
+    # 3. Ampliar los metadatos para incluir el nombre del archivo del modelo
+    # (Esto facilitará mucho la carga posterior)
     model_metadata = {
-        "task_type" : task_type,
-        "model_type" : str(type(model))
-        }
+        "task_type": task_type,
+        "model_type": str(type(model)),
+        "model_file": model_filename 
+    }
 
+    # 4. Guardar los metadatos JSON
     with open(metadata_file_path, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(model_metadata, indent=4, ensure_ascii=False))
+        json.dump(model_metadata, f, indent=4, ensure_ascii=False)
 
-    dump(model, model_file_path)
-
+    # 5. Guardar el modelo usando la librería correspondiente
+    if is_image_task:
+        # Keras tiene su propio método integrado para guardarse
+        model.save(model_file_path)
+    else:
+        # Scikit-Learn usa skops (o joblib/pickle)
+        dump(model, model_file_path)
 
 # # ==========================================
 # # FUNCIONES DE ENTRENAMIENTO: CLASIFICACIÓN

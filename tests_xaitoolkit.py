@@ -13,10 +13,7 @@ def preparar_entorno():
 
     dataset_path = find_dataset()
 
-    dataset = pd.read_csv(dataset_path)
-    target = find_target_feature_in_dataset(dataset)
-
-    x_train, x_test, y_train, y_test, dataset_metadata, scaler = preprocess_dataset(dataset, dataset_path, target)
+    x_train, x_test, y_train, y_test, dataset_metadata, scaler, target = preprocess_dataset(dataset_path)
     
     best_models_json = recommend_best_models(dataset_metadata_json=dataset_metadata)
 
@@ -30,13 +27,13 @@ def preparar_entorno():
     models = build_and_train_recommended_models(best_models_json, x_train, y_train)
 
     for model in models:
-        model_info = generate_model_info(model["model_object"], x_test, y_test, task_type=tipo_tarea)
+        model_info, y_pred = generate_model_info(model["model_object"], x_test, y_test, task_type=tipo_tarea)
         model["model_info"] = model_info
         print(model_info)
 
     return models, x_train, x_test, y_train, y_test, json.loads(dataset_metadata), scaler, dataset, target
 
-def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, cliente_target, model_info, dataset_metadata):
+def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, model_info, dataset_metadata):
     print("="*50)
     agent_executor = setup_xai_agent(metadata=dataset_metadata, model_info=model_info, toolkit=toolkit)
 
@@ -51,9 +48,9 @@ def test_con_llm(toolkit, cliente_ejemplo, cliente_ejemplo_descaled, cliente_tar
     })
     print("\nRespuesta LLM:\n", response_local['output'])
 
-    print(f"\nUsuario: Explícame qué debería cambiar para que me de la predicción {(1 - cliente_target)}: {cliente_ejemplo}")
+    print(f"\nUsuario: Explícame qué debería cambiar para que me de otra predicción: {cliente_ejemplo}")
     response_local = agent_executor.invoke({
-        "input": f"Explícame en un lenguaje de negocio qué debo cambiar para que cambie la predicción a {(1 - cliente_target)} en el siguiente cliente (valores reales): {cliente_ejemplo_descaled}"
+        "input": f"Explícame en un lenguaje de negocio qué debo cambiar para que cambie la predicción en el siguiente cliente (valores reales): {cliente_ejemplo_descaled}"
     })
     print("\nRespuesta LLM:\n", response_local['output'])
 
@@ -67,7 +64,7 @@ if __name__ == "__main__":
     # 2. Inicializar Toolkit con un solo modelo
     toolkit = xai.XAIToolkit(model=models[0]["model_object"], x_test=x_test, dataset_metadata=dataset_metadata, dataset = dataset, target = target)
     
-    sample = get_random_row(dataset=x_test, dataset_metadata=dataset_metadata, target = y_test)
+    sample = get_random_row(dataset=x_test, dataset_metadata=dataset_metadata)
 
     # 4. Probar agente (Descomenta la siguiente línea si tienes Ollama instalado y corriendo)
-    test_con_llm(toolkit, sample["sample"], descale_x(sample["sample"], scaler), sample["target"], models[0]["model_info"], dataset_metadata)
+    test_con_llm(toolkit, sample, descale_x(sample, scaler), models[0]["model_info"], dataset_metadata)

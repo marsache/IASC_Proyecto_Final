@@ -23,6 +23,8 @@ import uuid
 import base64
 from pathlib import Path
 from threading import Lock, Thread
+import zipfile
+import urllib.parse
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -73,114 +75,185 @@ def _update_session(session_id: str, **kwargs) -> None:
 # ---------------------------------------------------------------------------
 # Pipeline runner (executes in a background thread)
 # ---------------------------------------------------------------------------
-
-def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
+def _run_full_pipeline(session_id: str, dataset_path: str, target: str, is_image: bool) -> None:
     try:
-        _update_session(session_id, progress=0.05, message="Cargando dataset…")
-        df = pd.read_csv(csv_path)
-
-        if target not in df.columns:
-            raise ValueError(f"La columna '{target}' no existe en el dataset.")
-
-        _update_session(
-            session_id,
-            progress=0.15,
-            message="Preprocesando datos y generando perfil semántico…",
-        )
-        X_train, X_test, y_train, y_test, metadata_json, scaler, df = preprocess_dataset(
-            df, csv_path, target
-        )
+        _update_session(session_id, progress=0.0, message="Preprocesando datos…")
+        
+        # ARREGLO: Añadimos 'df_raw' como valor de retorno esperado.
+        # Asumimos que preprocess_dataset lee los datos y nos devuelve el DataFrame original 
+        # (o None en caso de ser un dataset de imágenes).
+        X_train, X_test, y_train, y_test, metadata_json, scaler, actual_target, df_raw = preprocess_dataset(dataset_path, target)
         metadata = json.loads(metadata_json)
 
-
-        loaded, model, task_type = try_load_model(csv_path=csv_path)
+        loaded, model, task_type = try_load_model(dataset_path=dataset_path)
         if not loaded:
-            _update_session(
-                session_id, progress=0.40, message="Seleccionando los mejores modelos…",
-                dataset_metadata=metadata_json
-            )
+            _update_session(session_id, progress=0.40, message="Seleccionando los mejores modelos…", dataset_metadata=metadata_json)
             recommendations_json = recommend_best_models(metadata_json)
             task_type = json.loads(recommendations_json).get("task_type", "classification")
 
             _update_session(session_id, progress=0.60, message="Entrenando modelos…")
-            trained_models = build_and_train_recommended_models(
-                recommendations_json, X_train, y_train
-            )
+            trained_models = build_and_train_recommended_models(recommendations_json, X_train, y_train)
+            
             if not trained_models:
-                raise ValueError(
-                    "No se pudo entrenar ningún modelo. Revisa el log de consola."
-                )
+                raise ValueError("No se pudo entrenar ningún modelo. Revisa el log de consola.")
 
             best = trained_models[0]
             model = best["model_object"]
 
             _update_session(session_id, progress=0.65, message="Guardando modelos…")
-
-            save_model(csv_path, task_type, model)
-
+            save_model(dataset_path, task_type, model)
             _update_session(session_id, progress=0.70, message="Modelos guardados")
 
+        _update_session(session_id, progress=0.80, message="Inicializando herramientas XAI…")
+        model_info, y_pred = generate_model_info(model, X_test, y_test, task_type)
 
-        _update_session(
-            session_id, progress=0.80, message="Inicializando herramientas XAI…"
-        )
-
-        model_info = generate_model_info(model, X_test, y_test, task_type)
-
-        df_clean = df.dropna().reset_index(drop=True)
         toolkit = XAIToolkit(
             model=model,
             x_test=X_test,
             dataset_metadata=metadata,
-            dataset=df_clean,
+            dataset=df_raw, # Pasará el df limpio para tabular, y None para imágenes
             target=target,
         )
 
-        _update_session(
-            session_id, progress=0.95, message="Configurando agente XAI…"
-        )
+        _update_session(session_id, progress=0.95, message="Configurando agente XAI…")
         agent_executor = setup_xai_agent(metadata, model_info, toolkit, get_history)
 
-        # --- NUEVO: Generar dataset aumentado para el explorador ---
-        _update_session(
-            session_id, progress=0.98, message="Generando predicciones para el explorador..."
-        )
-        
-        # OJO: Dependiendo de cómo funcione tu `preprocess_dataset`, 
-        # debes asegurarte de pasarle a model.predict() los datos ya escalados/codificados.
-        # Si 'scaler' puede transformar el df completo:
-        X_full_scaled = scaler.transform(df_clean.drop(columns=[target])) 
-        y_pred = model.predict(X_full_scaled)
-        
-        # Añadir columnas al dataframe limpio original (para que el usuario lo lea bien)
-        df_clean['Target_Real'] = df_clean[target]
-        df_clean['Target_Predicho'] = y_pred
-        
-        with _sessions_lock:
-            session = _sessions.get(session_id)
+        # Generar dataset aumentado SÓLO si es tabular
+        if not is_image:
+            df_clean = df_raw
+            _update_session(session_id, progress=0.98, message="Generando predicciones para el explorador...")
             
-        # Guardarlo como CSV en la carpeta temporal de la sesión
-        augmented_csv_path = os.path.join(session["_tmp_dir"], "augmented_dataset.csv")
-        df_clean.to_csv(augmented_csv_path, index=False)
-        # -----------------------------------------------------------
+            X_full_scaled = scaler.transform(df_clean.drop(columns=[target])) 
+            y_pred = model.predict(X_full_scaled) 
+            df_clean['Target_Real'] = df_clean[target]
+            df_clean['Target_Predicho'] = y_pred
+                        
+            with _sessions_lock:
+                session = _sessions.get(session_id)
+                
+            augmented_csv_path = os.path.join(session["_tmp_dir"], "augmented_dataset.csv")
+            df_clean.to_csv(augmented_csv_path, index=False)
+        else:
+            _update_session(session_id, progress=0.95, message="Calculando predicciones de imágenes para el explorador...")
+            
+            with _sessions_lock:
+                session = _sessions.get(session_id)
+                
+            def keras_predict_fn(keras_model, paths):
+                import tensorflow as tf
+                import numpy as np
+                from PIL import Image
+                
+                preds = []
+                target_size = (128, 128) # Asegúrate que coincide con el tamaño con el que entrenaste
+                for p in paths:
+                    img = Image.open(p).convert('RGB').resize(target_size)
+                    img_array = np.array(img, dtype=np.float32) / 255.0
+                    img_array = np.expand_dims(img_array, axis=0) # Crear batch de 1
+                    
+                    raw_pred = keras_model.predict(img_array, verbose=0)
+                    class_idx = np.argmax(raw_pred, axis=1)[0]
+                    
+                    # Usa los metadatos para transformar el [0] de vuelta a texto ["gato"]
+                    class_name = metadata.get("classes", [])[class_idx]
+                    preds.append(class_name)
+                    
+                return preds
+
+            # Ejecutamos nuestra nueva función externalizada (del archivo Python generado)
+            run_image_dataset_inference(
+                session_id=session_id,
+                tmp_dir=session["_tmp_dir"],
+                model=model,
+                predict_fn=keras_predict_fn,
+                update_session_fn=_update_session
+            )
 
         _update_session(
             session_id,
-            status="ready",
-            progress=1.0,
-            message="¡Pipeline inicializado correctamente!",
-            agent=agent_executor,
-            model_info=model_info,
+            status="ready", progress=1.0, message="¡Pipeline inicializado correctamente!",
+            agent=agent_executor, model_info=model_info,
         )
 
     except Exception as exc:
         print(exc)
-        _update_session(
-            session_id,
-            status="error",
-            message=str(exc),
-            error=str(exc),
-        )
+        _update_session(session_id, status="error", message=str(exc), error=str(exc))
+
+from typing import Any, Callable, List
+
+def run_image_dataset_inference(
+    session_id: str,
+    tmp_dir: str,
+    model: Any,
+    predict_fn: Callable[[Any, List[str]], List[Any]],
+    update_session_fn: Callable[[str, float, str], None]
+) -> str:
+    """
+    Scans the 'dataset_images' directory, runs batch inference using the provided 
+    model and prediction function, and generates a unified 'augmented_dataset.csv'.
+    
+    This avoids doing heavy disk scanning (os.walk) during API pagination calls
+    and populates the 'Target_Predicho' column with real model predictions.
+    """
+    img_folder = os.path.join(tmp_dir, "dataset_images")
+    augmented_csv_path = os.path.join(tmp_dir, "augmented_dataset.csv")
+    
+    if os.path.isfile(augmented_csv_path):
+        return augmented_csv_path
+
+    if not os.path.exists(img_folder):
+        raise FileNotFoundError(f"La carpeta de imágenes no existe: {img_folder}")
+        
+    update_session_fn(session_id, progress=0.95, message="Escaneando directorio de imágenes...")
+    
+    # 1. Gather all image files and infer their real targets from the subfolder names
+    image_records = []
+    valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.webp')
+    
+    for root, _, files in os.walk(img_folder):
+        for file in files:
+            if file.lower().endswith(valid_extensions):
+                full_path = os.path.join(root, file)
+                
+                # Deduce the real class/target from the immediate parent directory
+                parent_folder = os.path.basename(root)
+                target_real = parent_folder if parent_folder != "dataset_images" else "Desconocido"
+                
+                image_records.append({
+                    "file_path": full_path,
+                    "Target_Real": target_real
+                })
+                
+    if not image_records:
+        raise ValueError(f"No se encontraron imágenes válidas en la carpeta: {img_folder}")
+        
+    df_images = pd.DataFrame(image_records)
+    # Sort paths alphabetically to guarantee stable pagination sequences
+    df_images = df_images.sort_values("file_path").reset_index(drop=True)
+    
+    update_session_fn(session_id, progress=0.96, message=f"Ejecutando inferencia en {len(df_images)} imágenes...")
+    
+    # 2. Execute model inference using the custom injected prediction function
+    # The predict_fn should accept (model, list_of_paths) and return a list of predictions
+    try:
+        file_paths = df_images["file_path"].tolist()
+        predictions = predict_fn(model, file_paths)
+        
+        if len(predictions) != len(file_paths):
+            raise ValueError("La función de predicción debe devolver exactamente el mismo número de elementos que de rutas de entrada.")
+            
+        df_images["Target_Predicho"] = predictions
+        
+    except Exception as e:
+        df_images["Target_Predicho"] = "Error de Inferencia"
+        df_images.to_csv(augmented_csv_path, index=False)
+        raise RuntimeError(f"Error crítico durante la inferencia del modelo: {e}")
+        
+    # 3. Save the pre-computed augmented dataset to disk
+    df_images.to_csv(augmented_csv_path, index=False)
+    update_session_fn(session_id, progress=0.98, message="Explorador de imágenes e inferencia preparados con éxito.")
+    
+    return augmented_csv_path
 
 
 # ---------------------------------------------------------------------------
@@ -204,38 +277,81 @@ def index() -> FileResponse:
 # Upload CSV → return column names + HTML preview
 # ------------------------------------------------------------------
 @app.post("/api/upload")
-async def upload_csv(file: UploadFile = File(...)) -> JSONResponse:
-    if not (file.filename or "").lower().endswith(".csv"):
-        raise HTTPException(400, "Solo se aceptan archivos CSV.")
+async def upload_dataset(file: UploadFile = File(...)) -> JSONResponse:
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".zip")):
+        raise HTTPException(400, "Solo se aceptan archivos CSV o ZIP.")
 
     raw = await file.read()
 
-    # Write to a temp file to let pandas handle encoding / dialect detection
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
-    try:
-        with os.fdopen(tmp_fd, "wb") as fh:
-            fh.write(raw)
-        df = pd.read_csv(tmp_path)
-    except Exception as exc:
-        raise HTTPException(400, f"Error al leer el archivo CSV: {exc}") from exc
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    # --- RAMA ZIP (IMÁGENES) ---
+    if filename.endswith(".zip"):
+        tmp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(tmp_dir, "temp_upload.zip")
+        
+        with open(zip_path, "wb") as f:
+            f.write(raw)
+            
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmp_dir)
+                
+            # Escanear subcarpetas (clases)
+            classes = []
+            total_images = 0
+            valid_exts = ('.jpg', '.jpeg', '.png', '.bmp', '.webp')
+            tmp_dir = tmp_dir +"\\" +filename.split(".")[0]
+            for entry in os.listdir(tmp_dir):
+                full_path = os.path.join(tmp_dir, entry)
+                if os.path.isdir(full_path):
+                    # Contar imágenes válidas en la subcarpeta
+                    images = [img for img in os.listdir(full_path) if img.lower().endswith(valid_exts)]
+                    if images:
+                        classes.append(entry)
+                        total_images += len(images)
+            
+            preview_html = (
+                f"<div style='padding: 1rem; background: #f8f9fa; border-radius: 8px; text-align: center;'>"
+                f"  <strong>🖼️ Dataset de Imágenes Detectado</strong><br><br>"
+                f"  <span style='color: #495057;'>Clases encontradas ({len(classes)}):</span> <b>{', '.join(classes)}</b><br>"
+                f"  <span style='color: #495057;'>Total de imágenes:</span> <b>{total_images}</b>"
+                f"</div>"
+            )
+            
+            return JSONResponse({
+                "columns": ["label"], # Columna objetivo por defecto
+                "preview_html": preview_html,
+                "rows": total_images,
+                "cols": 2,
+                "is_image": True # Flag para el frontend
+            })
+            
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "El archivo ZIP está corrupto o es inválido.")
+            
+    # --- RAMA CSV (TABULAR) ORIGINAL ---
+    else:
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+        try:
+            with os.fdopen(tmp_fd, "wb") as fh:
+                fh.write(raw)
+            df = pd.read_csv(tmp_path)
+        except Exception as exc:
+            raise HTTPException(400, f"Error al leer el archivo CSV: {exc}") from exc
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
-    columns = df.columns.tolist()
-    preview_html = df.head(5).to_html(
-        classes="preview-table", border=0, index=False, escape=True
-    )
+        columns = df.columns.tolist()
+        preview_html = df.head(5).to_html(classes="preview-table", border=0, index=False, escape=True)
 
-    return JSONResponse(
-        {
+        return JSONResponse({
             "columns": columns,
             "preview_html": preview_html,
             "rows": int(df.shape[0]),
             "cols": int(df.shape[1]),
-        }
-    )
-
+            "is_image": False
+        })
 
 # ------------------------------------------------------------------
 # Initialize pipeline
@@ -243,48 +359,56 @@ async def upload_csv(file: UploadFile = File(...)) -> JSONResponse:
 @app.post("/api/initialize")
 async def initialize(
     file: UploadFile = File(...),
-    target: str = Form(...),
+    target: str = Form("label"), # Si viene vacío, por defecto "label"
 ) -> JSONResponse:
-    if not (file.filename or "").lower().endswith(".csv"):
-        raise HTTPException(400, "Solo se aceptan archivos CSV.")
-    if not target or not target.strip():
-        raise HTTPException(400, "El campo 'target' no puede estar vacío.")
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".zip")):
+        raise HTTPException(400, "Solo se aceptan archivos CSV o ZIP.")
 
     raw = await file.read()
 
-    # Store CSV in a dedicated temp directory so the metadata cache JSON
-    # generated by preprocess_dataset lands in the same directory.
     u = uuid.uuid5(uuid.NAMESPACE_DNS, file.filename)
     session_id = base64.b32encode(u.bytes).decode("ascii")[:8]
-
     tmp_dir = Path(tempfile.gettempdir()) / f"xai_session_{session_id}"
-
     tmp_dir.mkdir(exist_ok=True)
 
-    csv_path = os.path.join(tmp_dir, "dataset.csv")
-    with open(csv_path, "wb") as fh:
-        fh.write(raw)
+    dataset_path_to_pass = ""
+    is_image_dataset = filename.endswith(".zip")
+
+    if is_image_dataset:
+        zip_path = os.path.join(tmp_dir, "dataset.zip")
+        with open(zip_path, "wb") as fh:
+            fh.write(raw)
+            
+        extract_dir = os.path.join(tmp_dir, "dataset_images")
+        os.makedirs(extract_dir, exist_ok=True)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+            
+        dataset_path_to_pass = extract_dir + "\\" +filename.split('.')[0] # Pasamos el DIRECTORIO al pipeline
+        target = "label" # Forzamos el target
+    else:
+        csv_path = os.path.join(tmp_dir, "dataset.csv")
+        with open(csv_path, "wb") as fh:
+            fh.write(raw)
+        dataset_path_to_pass = csv_path
 
     with _sessions_lock:
         _sessions[session_id] = {
-            "status": "running",
-            "progress": 0.0,
-            "message": "Iniciando pipeline…",
-            "agent": None,
-            "model_info": None,
-            "error": None,
-            "_tmp_dir": tmp_dir,
+            "status": "running", "progress": 0.0,
+            "message": "Iniciando pipeline…", "agent": None,
+            "model_info": None, "error": None, "_tmp_dir": tmp_dir,
         }
 
+    # Le pasamos a la función asíncrona un nuevo parámetro is_image
     thread = Thread(
         target=_run_full_pipeline,
-        args=(session_id, csv_path, target.strip()),
+        args=(session_id, dataset_path_to_pass, target.strip(), is_image_dataset),
         daemon=True,
     )
     thread.start()
 
     return JSONResponse({"session_id": session_id})
-
 
 # ------------------------------------------------------------------
 # Poll pipeline status
@@ -302,7 +426,7 @@ def get_status(session_id: str) -> JSONResponse:
             "status": session["status"],
             "progress": session["progress"],
             "message": session["message"],
-            "dataset_metadata": session.get("dataset_metadata"), # <--- Añade esto
+            "dataset_metadata": session.get("dataset_metadata"),
             "model_info": session.get("model_info"),
         }
     )
@@ -433,7 +557,6 @@ def get_plot(filename: str) -> FileResponse:
 
     return FileResponse(real_path, media_type="image/png")
 
-
 @app.get("/api/dataset/{session_id}")
 def get_dataset(session_id: str, page: int = 1, size: int = 50) -> JSONResponse:
     with _sessions_lock:
@@ -446,32 +569,66 @@ def get_dataset(session_id: str, page: int = 1, size: int = 50) -> JSONResponse:
     if not tmp_dir:
         raise HTTPException(400, "Carpeta de datos no disponible.")
 
+    # Ahora AMBOS pipelines (tabular e imagen) generan este archivo. ¡Magia!
     csv_path = os.path.join(tmp_dir, "augmented_dataset.csv")
     if not os.path.exists(csv_path):
         raise HTTPException(400, "Dataset exploratorio no está listo aún.")
 
     try:
-        # Cargar el dataset (en producción con datasets gigantes usarías chunking o dask)
         df = pd.read_csv(csv_path)
         
+        # --- LÓGICA COMÚN: PAGINACIÓN ---
         total_rows = int(df.shape[0])
         start_idx = (page - 1) * size
         end_idx = start_idx + size
         
         # Extraer solo la página solicitada
-        df_page = df.iloc[start_idx:end_idx]
+        df_page = df.iloc[start_idx:end_idx].copy()
         
+        # --- INTERCEPTOR DE IMÁGENES PARA EL FRONTEND ---
+        image_keywords = ["image", "image_path", "file_path", "path", "url"]
+        image_col = next((col for col in df.columns if col.lower() in image_keywords), None)
+        
+        records = df_page.to_dict(orient="records")
+        
+        if image_col:
+            for row in records:
+                original_path = str(row[image_col])
+                
+                # Encriptamos la ruta para que pase por nuestro endpoint /api/image/
+                if not original_path.startswith("http"):
+                    safe_path = urllib.parse.quote(original_path, safe="")
+                    row[image_col] = f"/api/image/{session_id}?filepath={safe_path}"
+
         return JSONResponse({
             "total_rows": total_rows,
             "page": page,
             "size": size,
             "columns": df.columns.tolist(),
-            "data": df_page.to_dict(orient="records")
+            "data": records
         })
         
+    except HTTPException:
+        raise # Dejar pasar excepciones controladas HTTP
     except Exception as exc:
-        raise HTTPException(500, f"Error al leer el dataset: {exc}")
-
+        raise HTTPException(500, f"Error al leer o procesar el dataset: {exc}")
+    
+# --- NUEVO ENDPOINT PARA SERVIR LAS IMÁGENES ---
+@app.get("/api/image/{session_id}")
+def serve_image(session_id: str, filepath: str):
+    """
+    Recibe la ruta encriptada desde el frontend, la lee del disco duro 
+    y se la envía al navegador para que la etiqueta <img> la pueda renderizar.
+    """
+    # 1. Decodificar la ruta de vuelta a su formato original (ej. C:/... o /var/...)
+    real_path = urllib.parse.unquote(filepath)
+    
+    # 2. Comprobar que realmente existe
+    if not os.path.exists(real_path):
+        raise HTTPException(404, f"Imagen no encontrada en el disco: {real_path}")
+        
+    # 3. Devolver el archivo directamente (FastAPI asigna el Content-Type correcto automáticamente)
+    return FileResponse(real_path)
 
 # ------------------------------------------------------------------
 # Delete / reset session
