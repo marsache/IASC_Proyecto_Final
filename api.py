@@ -315,6 +315,17 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
+def _collect_plot_paths(obj, collector: list[str]) -> None:
+    if isinstance(obj, dict):
+        plot_path = obj.get("plot_path")
+        if isinstance(plot_path, str):
+            collector.append(plot_path)
+        for value in obj.values():
+            _collect_plot_paths(value, collector)
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_plot_paths(item, collector)
+
 
 @app.post("/api/chat")
 def chat(body: ChatRequest) -> JSONResponse:
@@ -336,30 +347,70 @@ def chat(body: ChatRequest) -> JSONResponse:
 
     try:
         result = agent.invoke({"input": body.message.strip()}, config = {"configurable": {"session_id": body.session_id}})
+        print("RESULT:", result)
         response_text = result.get("output", str(result))
 
-        # Collect the first valid plot produced during this turn
-        plot_url: str | None = None
+        # Collect all valid plot paths produced during this turn
+        plot_urls: list[str] = []
+        seen_plot_urls: set[str] = set()
         for _action, observation in result.get("intermediate_steps", []):
             try:
-                obs_dict = (
-                    json.loads(observation)
-                    if isinstance(observation, str)
-                    else {}
-                )
-                if isinstance(obs_dict, dict) and "plot_path" in obs_dict:
-                    raw_path = obs_dict["plot_path"]
+                print("OBSERVATION:", observation)
+
+                # -----------------------------
+                # Convertir observation correctamente
+                # -----------------------------
+                if isinstance(observation, str):
+                    obs_dict = json.loads(observation)
+
+                elif isinstance(observation, dict):
+                    obs_dict = observation
+
+                else:
+                    obs_dict = {}
+
+                print("OBS_DICT:", obs_dict)
+
+                # -----------------------------
+                # Buscar plot_path(s)
+                # -----------------------------
+                raw_paths: list[str] = []
+                _collect_plot_paths(obs_dict, raw_paths)
+
+                print("RAW PATHS:", raw_paths)
+
+                # -----------------------------
+                # Validar rutas y generar URLs
+                # -----------------------------
+                for raw_path in raw_paths:
+
                     safe_path = os.path.realpath(raw_path)
+
+                    print("SAFE PATH:", safe_path)
+
                     if (
                         safe_path.startswith(_PLOTS_DIR + os.sep)
                         and os.path.isfile(safe_path)
                     ):
-                        plot_url = f"/api/plot/{os.path.basename(safe_path)}"
-                        break
-            except (json.JSONDecodeError, TypeError):
-                pass
 
-        return JSONResponse({"response": response_text, "plot_url": plot_url})
+                        plot_url = f"/api/plot/{os.path.basename(safe_path)}"
+
+                        print("PLOT URL:", plot_url)
+
+                        if plot_url not in seen_plot_urls:
+                            seen_plot_urls.add(plot_url)
+                            plot_urls.append(plot_url)
+
+            except Exception as e:
+                print("ERROR LEYENDO INTERMEDIATE STEP:", e)
+
+        return JSONResponse(
+            {
+                "response": response_text,
+                "plot_urls": plot_urls,
+                "plot_url": plot_urls[0] if plot_urls else None,
+            }
+        )
 
     except Exception as exc:
         raise HTTPException(500, f"Error al procesar la consulta: {exc}") from exc

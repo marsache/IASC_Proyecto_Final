@@ -792,7 +792,10 @@ async function sendMessage() {
       appendMessage('bot', '❌ Error: ' + (data.detail || 'Algo salió mal.'));
     } else {
       appendMessage('bot', data.response || '(respuesta vacía)');
-      if (data.plot_url) appendPlot(data.plot_url);
+      const plotUrls = Array.isArray(data.plot_urls)
+        ? data.plot_urls
+        : (data.plot_url ? [data.plot_url] : []);
+      plotUrls.forEach((url) => appendPlotBubble(url));
     }
   } catch (err) {
     typingRow.remove();
@@ -842,7 +845,7 @@ function appendTyping() {
   return row;
 }
 
-function appendPlot(url) {
+function appendPlotBubble(url) {
   const wrap = document.createElement('div');
   wrap.className = 'plot-wrap';
   wrap.title = 'Clic para ampliar';
@@ -851,9 +854,21 @@ function appendPlot(url) {
   img.alt = 'Gráfico XAI';
   img.addEventListener('click', () => openLightbox(url));
   wrap.appendChild(img);
-  const rows = messagesEl.querySelectorAll('.msg-row.bot');
-  const lastRow = rows[rows.length - 1];
-  if (lastRow) lastRow.querySelector('.bubble')?.appendChild(wrap);
+
+  const row = document.createElement('div');
+  row.className = 'msg-row bot';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar bot';
+  avatar.textContent = '🤖';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.appendChild(wrap);
+
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  messagesEl.appendChild(row);
   scrollToBottom();
 }
 

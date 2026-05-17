@@ -171,7 +171,9 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
         tools=tools, 
         verbose=True, 
         handle_parsing_errors=True, # Recomendado para modelos 8B
-        callbacks= [callback]
+        callbacks= [callback],
+        return_intermediate_steps=True,
+        #max_iterations=1
     )
 
     agent_executor = RunnableWithMessageHistory(
