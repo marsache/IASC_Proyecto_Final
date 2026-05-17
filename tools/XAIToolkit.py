@@ -397,8 +397,8 @@ class XAIToolkit:
             result = {
                 "prediccion_modelo": round(prediction, 4),
                 "reglas_ancla": list(explanation.anchor),
-                "precision": round(float(explanation.precision[0]), 4),
-                "cobertura": round(float(explanation.coverage[0]), 4),
+                "precision": round(float(explanation.precision), 4),
+                "cobertura": round(float(explanation.coverage), 4),
             }
 
             return json.dumps(result)
