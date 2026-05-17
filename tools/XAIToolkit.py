@@ -16,6 +16,9 @@ from alibi.explainers import AnchorTabular
 
 from dice_ml import Data, Model, Dice
 
+from mmd_critic import MMDCritic
+from mmd_critic.kernels import RBFKernel
+
 class XAIToolkit:
     def __init__(self, model, x_test, dataset_metadata, dataset, target, plots_dir: str = "plots"):
         # 1. Asignaciones básicas
@@ -85,6 +88,8 @@ class XAIToolkit:
             feature_names=self.labels,
         )
         self.anchor_explainer.fit(self.x_test)
+
+        self.critic = MMDCritic(features_df, RBFKernel(sigma = 1))
 
     def _get_lime_predict_fn(self):
         """Devuelve la función de predicción adecuada para el explainer LIME."""
@@ -406,3 +411,14 @@ class XAIToolkit:
         lime_result = json.loads(self.tool_lime_explain_local_prediction(instance_data))
         anchor_result = json.loads(self.tool_anchor_explain_local_prediction(instance_data))
         return json.dumps({"shap": shap_result, "lime": lime_result, "anchor": anchor_result})
+
+    def tool_prototype(self, k : int = 5) -> str:
+        """Genera datos bien representados (prototipos) del dataset
+
+        Args:
+            k (int, optional): Número de prototipos a crear. Por defecto es 5.
+
+        Returns:
+            str: Array de los valores prototípicos
+        """
+        return str(self.critic.select_prototypes(k))

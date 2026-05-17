@@ -82,7 +82,7 @@ def preprocess_dataset(dataset: pd.DataFrame, dataset_path: str, target: str) ->
     X_test = scaler.transform(X_test)
 
     # Devolvemos el metadato como 5to elemento para guardarlo o pasarlo al otro agente
-    return X_train, X_test, y_train, y_test, dataset_metadata_json, scaler
+    return X_train, X_test, y_train, y_test, dataset_metadata_json, scaler, dataset
 
 def get_random_row(dataset: np.ndarray, dataset_metadata, target):
     """

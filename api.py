@@ -20,6 +20,8 @@ import shutil
 import sys
 import tempfile
 import uuid
+import base64
+from pathlib import Path
 from threading import Lock, Thread
 
 import pandas as pd
@@ -27,6 +29,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from langchain_community.chat_message_histories import ChatMessageHistory
 
 # Make sure relative imports (config, utils, …) resolve correctly.
 sys.path.insert(0, os.path.dirname(__file__))
@@ -36,7 +40,7 @@ from agents.xai_agent import setup_xai_agent
 from config import getSettings          # noqa: F401  (imported for side-effects)
 from tools.XAIToolkit import XAIToolkit
 from utils.dataset_utils import preprocess_dataset
-from utils.models import build_and_train_recommended_models, generate_model_info
+from utils.models import build_and_train_recommended_models, generate_model_info, try_load_model, save_model
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -52,6 +56,12 @@ os.makedirs(_STATIC_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 _sessions: dict = {}
 _sessions_lock = Lock()
+
+store = {}
+def get_history(session_id: str):
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
 
 
 def _update_session(session_id: str, **kwargs) -> None:
@@ -77,33 +87,44 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
             progress=0.15,
             message="Preprocesando datos y generando perfil semántico…",
         )
-        X_train, X_test, y_train, y_test, metadata_json, scaler = preprocess_dataset(
+        X_train, X_test, y_train, y_test, metadata_json, scaler, df = preprocess_dataset(
             df, csv_path, target
         )
         metadata = json.loads(metadata_json)
 
-        _update_session(
-            session_id, progress=0.40, message="Seleccionando los mejores modelos…",
-            dataset_metadata=metadata_json
-        )
-        recommendations_json = recommend_best_models(metadata_json)
-        task_type = json.loads(recommendations_json).get("task_type", "classification")
 
-        _update_session(session_id, progress=0.60, message="Entrenando modelos…")
-        trained_models = build_and_train_recommended_models(
-            recommendations_json, X_train, y_train
-        )
-        if not trained_models:
-            raise ValueError(
-                "No se pudo entrenar ningún modelo. Revisa el log de consola."
+        loaded, model, task_type = try_load_model(csv_path=csv_path)
+        if not loaded:
+            _update_session(
+                session_id, progress=0.40, message="Seleccionando los mejores modelos…",
+                dataset_metadata=metadata_json
             )
+            recommendations_json = recommend_best_models(metadata_json)
+            task_type = json.loads(recommendations_json).get("task_type", "classification")
 
-        best = trained_models[0]
-        model = best["model_object"]
+            _update_session(session_id, progress=0.60, message="Entrenando modelos…")
+            trained_models = build_and_train_recommended_models(
+                recommendations_json, X_train, y_train
+            )
+            if not trained_models:
+                raise ValueError(
+                    "No se pudo entrenar ningún modelo. Revisa el log de consola."
+                )
+
+            best = trained_models[0]
+            model = best["model_object"]
+
+            _update_session(session_id, progress=0.65, message="Guardando modelos…")
+
+            save_model(csv_path, task_type, model)
+
+            _update_session(session_id, progress=0.70, message="Modelos guardados")
+
 
         _update_session(
             session_id, progress=0.80, message="Inicializando herramientas XAI…"
         )
+
         model_info = generate_model_info(model, X_test, y_test, task_type)
 
         df_clean = df.dropna().reset_index(drop=True)
@@ -118,7 +139,7 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
         _update_session(
             session_id, progress=0.95, message="Configurando agente XAI…"
         )
-        agent_executor = setup_xai_agent(metadata, model_info, toolkit)
+        agent_executor = setup_xai_agent(metadata, model_info, toolkit, get_history)
 
         # --- NUEVO: Generar dataset aumentado para el explorador ---
         _update_session(
@@ -153,6 +174,7 @@ def _run_full_pipeline(session_id: str, csv_path: str, target: str) -> None:
         )
 
     except Exception as exc:
+        print(exc)
         _update_session(
             session_id,
             status="error",
@@ -232,12 +254,16 @@ async def initialize(
 
     # Store CSV in a dedicated temp directory so the metadata cache JSON
     # generated by preprocess_dataset lands in the same directory.
-    tmp_dir = tempfile.mkdtemp(prefix="xai_session_")
+    u = uuid.uuid5(uuid.NAMESPACE_DNS, file.filename)
+    session_id = base64.b32encode(u.bytes).decode("ascii")[:8]
+
+    tmp_dir = Path(tempfile.gettempdir()) / f"xai_session_{session_id}"
+
+    tmp_dir.mkdir(exist_ok=True)
+
     csv_path = os.path.join(tmp_dir, "dataset.csv")
     with open(csv_path, "wb") as fh:
         fh.write(raw)
-
-    session_id = str(uuid.uuid4())
 
     with _sessions_lock:
         _sessions[session_id] = {
@@ -309,7 +335,7 @@ def chat(body: ChatRequest) -> JSONResponse:
     agent = session["agent"]
 
     try:
-        result = agent.invoke({"input": body.message.strip()})
+        result = agent.invoke({"input": body.message.strip()}, config = {"configurable": {"session_id": body.session_id}})
         response_text = result.get("output", str(result))
 
         # Collect the first valid plot produced during this turn
