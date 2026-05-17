@@ -8,6 +8,8 @@ from langchain_classic.memory import ChatMessageHistory
 from langchain_core.runnables import RunnableWithMessageHistory
 from langchain_core.callbacks import BaseCallbackHandler
 
+from .critic_agent import critic
+
 class InstanceMemory:
     def __init__(self):
         self.last_instance = None
@@ -23,9 +25,10 @@ class XAIInstanceCaptureCallback(BaseCallbackHandler):
             self.memory.last_instance = tool_input["instance_data"]
 
 class XAIAgent:
-    def __init__(self, agent, memory):
+    def __init__(self, agent, memory, desc):
         self.agent = agent
         self.memory = memory
+        self.descriptions = desc
 
     def invoke(self, input_dict, config = None):
         # Construimos el input final para el agente
@@ -35,7 +38,31 @@ class XAIAgent:
                                  if self.memory.last_instance else "Ninguna"
         }
 
-        return self.agent.invoke(final_input, config)
+        stop = False
+        max_iters = 3
+        iters = 0
+
+        while not stop and iters < max_iters:
+            iters += 1
+            result =  self.agent.invoke(final_input, config)
+            intermediate_steps = result.get("intermediate_steps", [])
+
+            response_text = result.get("output", str(result))
+            response = json.loads(response_text)
+            response = {
+                "action_input" : json.loads(response_text),
+                "tool" : intermediate_steps[-1][0].tool,
+                "input" : final_input
+            }
+
+            c = critic(response, self.descriptions)
+            
+            stop = c.get("action", "Repeat") == "Final_Answer" or "Final Answer"
+
+            final_input["input"] += f"\n {c.get("action_input", "")}"
+
+        return {"output" : c["action_input"], "intermediate_steps" : intermediate_steps}
+
 
 def setup_xai_agent(metadata, model_info, toolkit, get_history):
     # 1. Procesar el metadato generado por el Agente Perfilador
@@ -68,19 +95,22 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
     tool_local = StructuredTool.from_function(
         func=toolkit.tool_shap_lime_explain_local_prediction,
         name="explicar_prediccion_local",
-        description="Útil para explicar por qué se tomó una decisión para un cliente específico."
+        description="Útil para explicar por qué se tomó una decisión para un cliente específico.",
+        return_direct = True
     )
 
     tool_cf = StructuredTool.from_function(
         func = toolkit.tool_dice_explain,
         name = "generar_contraejemplo",
-        description="Útil para dar ejemplos de qué se debe cambiar en una instancia para que cambie el resultado"
+        description="Útil para dar ejemplos de qué se debe cambiar en una instancia para que cambie el resultado",
+        return_direct = True
     )
     
     tool_proto = StructuredTool.from_function(
         func = toolkit.tool_prototype,
         name = "generar_prototipos",
-        description= "Útil para hablar de los datos más representativos del dataset"
+        description= "Útil para hablar de los datos más representativos del dataset",
+        return_direct = True
     )
     
     
@@ -94,7 +124,8 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
     # 4. Definir el System Prompt con los datos del perfilador
     # Nota: Usamos doble llave {{ }} para lo que NO queremos que LangChain intente rellenar ahora (formato JSON)
     system_prompt_template = """
-    Eres un asistente experto en Inteligencia Artificial Explicable (XAI). Tu objetivo es analizar y explicar las predicciones de modelos de Machine Learning de forma detallada, comprensible y razonada para un usuario humano.
+    Eres un asistente experto en Inteligencia Artificial Explicable (XAI). Tu objetivo es analizar y seleccionar qué herramienta es apropiada para la explicación requerida por el usuario.
+    SOLO debes llamar a la herramienta.
 
     [CONTEXTO DEL PROBLEMA]
     - Dataset: {dataset_name}
@@ -132,19 +163,18 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
 
 
     [INSTRUCCIONES PARA LA EXPLICACIÓN FINAL]
-    Cuando hayas usado las herramientas necesarias y estés listo para responder al usuario, debes usar la acción "Final Answer".
+    Cuando hayas usado la herramienta seleccionada, debes usar la acción "Final Answer".
     ```json
     {{
         "action": "Final Answer",
-        "action_input": "Tu explicación larga aquí. Usa \\n para saltos de línea. NUNCA uses comillas triples."
+        "action_input": "Salida proporcionada por la herramienta llamada"
     }}
     ```
 
     Reglas para redactar el 'action_input' de tu Final Answer:
-    - Sé narrativo y coherente: No te limites a listar variables y sus pesos. Redacta párrafos hilados.
-    - Contextualiza los valores: Relaciona el valor de la característica con la realidad del dataset.
-    - Explica el 'Por qué': Profundiza en los argumentos (SHAP/LIME) y explica cómo la combinación de factores lleva a la decisión.
-    - NO te inventes información que no esté en la explicabilidad del modelo. Usa solo los datos proporcionados para tus explicaciones.
+    - Debes devolver Final Answer inmediatamente después de recibir el resultado.
+    - Llama ÚNICAMENTE a solo una herramienta
+    - Utiliza EXACTAMENTE la salida de la herramienta a la que se ha llamado
     """
 
     # 5. Crear el Prompt Template y aplicar variables parciales (las que vienen del perfilador)
@@ -184,6 +214,6 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
         output_messages_key="output",
     )
 
-    xaiagent = XAIAgent(agent_executor, memory)
+    xaiagent = XAIAgent(agent_executor, memory, [{t.name : t.description} for t in tools])
 
     return xaiagent
