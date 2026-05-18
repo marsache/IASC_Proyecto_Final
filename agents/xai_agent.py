@@ -64,6 +64,85 @@ class XAIAgent:
         return {"output" : c["action_input"], "intermediate_steps" : intermediate_steps}
 
 
+def get_agent_tools(toolkit, dataset_type: str):
+    """
+    Devuelve la lista de herramientas exclusivas y permitidas 
+    según la naturaleza del dataset (tabular o imagen).
+    """
+    
+    tool_global = StructuredTool.from_function(
+        func=toolkit.tool_shap_explain_global,
+        name="explicar_modelo_global",
+        description="Útil para explicar qué variables importan más en todo el modelo general.",
+        return_direct=True
+    )
+
+    if dataset_type == "tabular":
+        tool_local = StructuredTool.from_function(
+            func=toolkit.tool_shap_lime_explain_local_prediction,
+            name="explicar_prediccion_local",
+            description="Útil para explicar por qué se tomó una decisión para un cliente o registro específico.",
+            return_direct=True
+        )
+
+        tool_cf = StructuredTool.from_function(
+            func=toolkit.tool_dice_explain,
+            name="generar_contraejemplo",
+            description="Útil para dar ejemplos de qué se debe cambiar en una instancia tabular para que cambie el resultado.",
+            return_direct=True
+        )
+        
+        tool_proto = StructuredTool.from_function(
+            func=toolkit.tool_prototype,
+            name="generar_prototipos",
+            description="Útil para hablar de los datos más representativos del dataset tabular.",
+            return_direct=True
+        )
+        
+        return [tool_global, tool_local, tool_cf, tool_proto]
+
+    elif dataset_type == "image":
+        tool_gradcam = StructuredTool.from_function(
+            func=toolkit.tool_gradcam_explain_local_prediction,
+            name="explicar_imagen_gradcam",
+            description="Útil para generar mapas de calor y explicar visualmente de forma general en qué áreas gruesas de la imagen se fijó el modelo para tomar su decisión.",
+            return_direct=True
+        )
+
+        tool_saliency = StructuredTool.from_function(
+            func=toolkit.tool_saliency_map_explain,
+            name="explicar_imagen_saliencia",
+            description="Útil para calcular la sensibilidad de los píxeles. Úsalo cuando el usuario quiera saber qué contornos o píxeles exactos cambiarían más drásticamente la predicción si se alteraran.",
+            return_direct=True
+        )
+
+        tool_ig = StructuredTool.from_function(
+            func=toolkit.tool_integrated_gradients_explain,
+            name="explicar_imagen_gradientes_integrados",
+            description="Útil para ver una atribución matemática exacta a nivel de píxel. Úsalo para explicar de forma muy fina cómo cada píxel contribuyó desde un estado base (negro) hasta la decisión final.",
+            return_direct=True
+        )
+
+        tool_occlusion = StructuredTool.from_function(
+            func=toolkit.tool_occlusion_sensitivity_explain,
+            name="explicar_imagen_oclusion",
+            description="Útil para probar la robustez del modelo. Úsalo si se necesita saber qué pasa con la confianza del modelo cuando se tapan u ocultan ciertas partes clave de la imagen.",
+            return_direct=True
+        )
+        
+        # (Opcional) Si mantienes LIME para imágenes, la añades aquí
+        tool_lime_image = StructuredTool.from_function(
+            func=toolkit.tool_lime_explain_local_prediction,
+            name="explicar_imagen_lime_superpixeles",
+            description="Útil para agrupar la imagen en superpíxeles y ver qué parches visuales actúan a favor o en contra de la predicción.",
+            return_direct=True
+        )
+
+        return [tool_global, tool_gradcam, tool_saliency, tool_ig, tool_occlusion, tool_lime_image]
+
+    else:
+        raise ValueError(f"dataset_type no soportado: {dataset_type}. Usa 'tabular' o 'image'.")
+    
 def setup_xai_agent(metadata, model_info, toolkit, get_history):
     # 1. Procesar el metadato generado por el Agente Perfilador
     # Extraemos la información del JSON para el prompt
@@ -72,52 +151,9 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
     target_info = metadata.get("target_description", "No disponible")
     # Convertimos el diccionario de features a un string legible para el LLM
     features_dict = json.dumps(metadata.get("features", {}), indent=2, ensure_ascii=False)
-
-    # 2. Adaptación a LangChain Tools
-    tool_global = StructuredTool.from_function(
-        func=toolkit.tool_shap_explain_global,
-        name="explicar_modelo_global",
-        description="Útil para explicar qué variables importan más en todo el modelo general."
-    )
     
-    # tool_local = StructuredTool.from_function(
-    #     func=toolkit.tool_shap_explain_local_prediction,
-    #     name="explicar_prediccion_local",
-    #     description="Útil para explicar por qué se tomó una decisión para un cliente específico."
-    # )
-
-    # tool_lime_local = StructuredTool.from_function(
-    #     func=toolkit.tool_lime_explain_local_prediction,
-    #     name="explicar_prediccion_local_lime",
-    #     description="Útil para explicar por qué el modelo tomó una decisión para un cliente específico usando LIME."
-    # )
-
-    tool_local = StructuredTool.from_function(
-        func=toolkit.tool_shap_lime_explain_local_prediction,
-        name="explicar_prediccion_local",
-        description="Útil para explicar por qué se tomó una decisión para un cliente específico.",
-        return_direct = True
-    )
-
-    tool_cf = StructuredTool.from_function(
-        func = toolkit.tool_dice_explain,
-        name = "generar_contraejemplo",
-        description="Útil para dar ejemplos de qué se debe cambiar en una instancia para que cambie el resultado",
-        return_direct = True
-    )
-    
-    tool_proto = StructuredTool.from_function(
-        func = toolkit.tool_prototype,
-        name = "generar_prototipos",
-        description= "Útil para hablar de los datos más representativos del dataset",
-        return_direct = True
-    )
-    
-    
-    #tools = [tool_global, tool_local, tool_lime_local]
-    tools = [tool_global, tool_local, tool_cf, tool_proto]
-    #tool_names = [tool_global.name, tool_local.name, tool_lime_local.name]
-    tool_names = [tool_global.name, tool_local.name, tool_cf.name, tool_proto.name]
+    tools = get_agent_tools(toolkit, metadata.get("dataset_type", "tabular"))
+    tool_names = [tool.name for tool in tools]
     # 3. Configurar LLM local
     llm = ChatOllama(model="llama3", temperature=0, format = "json")
 
@@ -167,7 +203,7 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
     ```json
     {{
         "action": "Final Answer",
-        "action_input": "Salida proporcionada por la herramienta llamada"
+        "action_input": "<salida de la herramienta>"
     }}
     ```
 
@@ -200,7 +236,7 @@ def setup_xai_agent(metadata, model_info, toolkit, get_history):
         agent=agent, 
         tools=tools, 
         verbose=True, 
-        handle_parsing_errors=True, # Recomendado para modelos 8B
+        handle_parsing_errors=True,
         callbacks= [callback],
         return_intermediate_steps=True,
         #max_iterations=1

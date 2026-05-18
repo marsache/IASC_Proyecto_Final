@@ -1096,7 +1096,7 @@ function explainRow(rowIndex) {
     // Es una imagen
     const path = rowData[imageColumn];
     const target = rowData["Target_Predicho"] || "desconocido";
-    promptText = `Genera una explicación local detallada para la imagen ubicada en '${path}'. ¿Por qué el modelo la clasificó como '${target}'? Muestra el mapa de calor de superpíxeles o explicador visual correspondiente.`;
+    promptText = `Genera una explicación local detallada para la imagen ubicada en: '${path}'. \n\nPregunta: ¿Puedes mostrar las zonas más importantes de la imagen para la decisión del modelo?.`;
   } else {
     // Son datos tabulares
     promptText = "Genera una explicación local detallada para la siguiente instancia. ¿Por qué el modelo hizo esta predicción en base a las siguientes variables?\n\n";
@@ -1106,7 +1106,9 @@ function explainRow(rowIndex) {
   }
 
   msgInput.value = promptText;
-  sendMessage();
+
+  msgInput.focus();
+  // sendMessage();
 }
 
 function updatePaginationControls() {

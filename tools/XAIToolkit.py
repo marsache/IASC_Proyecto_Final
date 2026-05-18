@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import shap
+import tensorflow as tf
 import json
 
 from shap.maskers import Image as shap_image
@@ -580,3 +581,421 @@ class XAIToolkit:
             str: Array de los valores prototípicos
         """
         return str(self.critic.select_prototypes(k))
+    
+    def tool_gradcam_explain_local_prediction(self, instance_data: dict) -> str:
+        """
+        Útil para explicar visualmente en qué partes de la imagen se fijó el modelo
+        para tomar su decisión, usando la técnica Grad-CAM.
+        
+        Args:
+            instance_data (dict): Debe contener {"filepath": "ruta/a/la/imagen.jpg"}.
+        Returns:
+            str: Un JSON en formato string con la clase predicha y la ruta del mapa de calor generado.
+        """
+        try:
+
+            # 1. PROCESAR LA RUTA DE LA IMAGEN
+            file_path = str(instance_data.get("filepath", instance_data.get("image_path", "")))
+            if 'filepath=' in file_path:
+                file_path = file_path.split('filepath=')[1]
+            file_path = urllib.parse.unquote(file_path)
+            
+            if not file_path or not os.path.exists(file_path):
+                return json.dumps({"error": f"Ruta de imagen inválida o inexistente: {file_path}"})
+
+            # 2. CARGAR Y PREPROCESAR LA IMAGEN
+            img_size = (128, 128)
+            if hasattr(self, "dataset_metadata") and self.dataset_metadata:
+                img_size = self.dataset_metadata.get("image_size", (128, 128))
+
+            img = Image.open(file_path).convert("RGB").resize(img_size)
+            img_array = np.array(img, dtype=np.float32)
+            
+            img_array = img_array / 255.0 
+            
+            img_tensor = np.expand_dims(img_array, axis=0) # Añadir dimensión de batch (1, H, W, C)
+
+            # 3. ENCONTRAR LA ÚLTIMA CAPA CONVOLUCIONAL AUTOMÁTICAMANTE
+            last_conv_layer_name = None
+            target_model = self.model  # Por defecto, asumimos que no hay Transfer Learning
+
+            # Paso A: Detectar si el modelo tiene un modelo base anidado (caja negra)
+            for layer in self.model.layers:
+                if isinstance(layer, tf.keras.Model):
+                    target_model = layer  # Cambiamos nuestro "foco" al modelo interno
+                    break
+
+            # Paso B: Buscar la convolución dentro del modelo correcto
+            for layer in reversed(target_model.layers):
+                if 'conv' in layer.name.lower():
+                    try:
+                        shape = layer.output.shape
+                        if isinstance(shape, list): shape = shape[0]
+                        if len(shape) == 4:
+                            last_conv_layer_name = layer.name
+                            break
+                    except (AttributeError, ValueError):
+                        continue
+
+            if not last_conv_layer_name:
+                return json.dumps({"error": "No se pudo encontrar una capa convolucional en el modelo para calcular Grad-CAM."})
+
+            # 4. CONSTRUIR EL MODELO GRAD-CAM
+            base_extractor = tf.keras.models.Model(
+                inputs=target_model.inputs, 
+                outputs=[target_model.get_layer(last_conv_layer_name).output, target_model.output]
+            )
+
+            with tf.GradientTape() as tape:
+                if target_model is self.model:
+                    # Caso Normal: No hay Transfer Learning
+                    conv_outputs, predictions = base_extractor(img_tensor)
+                else:
+                    # Caso Transfer Learning: 
+                    # Sacamos la foto de la convolución y la salida del modelo base
+                    conv_outputs, x = base_extractor(img_tensor)
+                    
+                    # ¡Clave! Le decimos al Tape que empiece a rastrear gradientes desde aquí
+                    tape.watch(conv_outputs)
+                    
+                    # Terminamos de pasar el tensor por las capas superiores de tu modelo
+                    # (Típicamente tus capas Flatten, Dropout y Dense finales)
+                    head_started = False
+                    for layer in self.model.layers:
+                        if layer is target_model:
+                            head_started = True  # Encontramos la caja negra, empezamos a aplicar lo que sigue
+                            continue
+                        if head_started:
+                            x = layer(x)
+                            
+                    predictions = x
+
+                # Obtenemos el índice de la clase con la puntuación más alta
+                top_class_index = tf.argmax(predictions[0])
+                loss = predictions[:, top_class_index]
+
+            # Extraemos los gradientes
+            grads = tape.gradient(loss, conv_outputs)
+            
+            # Calculamos los pesos guiados promedio por cada canal
+            pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+            # Multiplicamos cada canal del mapa por "cuán importante" es
+            conv_outputs = conv_outputs[0]
+            heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+            heatmap = tf.squeeze(heatmap)
+
+            # Normalizamos el mapa de calor entre 0 y 1
+            heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+            heatmap = heatmap.numpy()
+
+            # 6. OBTENER EL NOMBRE DE LA CLASE PREDICHA
+            top_label = int(top_class_index.numpy())
+            clase_predicha = str(top_label)
+            if hasattr(self, "dataset_metadata") and self.dataset_metadata:
+                classes = self.dataset_metadata.get("classes", [])
+                if top_label < len(classes):
+                    clase_predicha = classes[top_label]
+
+            # 7. GENERAR Y GUARDAR EL GRÁFICO SUPERPUESTO (ORIGINAL + MAPA DE CALOR)
+            try:
+                # Usamos matplotlib para redimensionar el mapa de calor de forma nativa
+                # y superponerlo a la imagen original
+                fig, ax = plt.subplots(figsize=(6, 6))
+                
+                # Imagen original de fondo
+                ax.imshow(img_array.astype('uint8'))
+                
+                # Mapa de calor superpuesto con colormap 'jet' y opacidad
+                extent = [0, img_size[0], img_size[1], 0]
+                ax.imshow(heatmap, cmap='jet', alpha=0.5, extent=extent)
+                
+                ax.axis("off")
+                ax.set_title(f"Grad-CAM: {clase_predicha}")
+
+                path = os.path.join(self.plots_dir, f"gradcam_local_{uuid.uuid4().hex[:8]}.png")
+                fig.savefig(path, bbox_inches="tight")
+                plt.close(fig)
+
+            except Exception as plot_err:
+                return json.dumps({"error": f"Error al renderizar el mapa Grad-CAM: {str(plot_err)}"})
+
+            # 8. PREPARAR LA RESPUESTA (PUENTE DE METADATOS PARA EL AGENTE)
+            result = {
+                "tipo_xai": "Grad-CAM",
+                "tipo_dataset": "imagen",
+                "clase_predicha_index": top_label,
+                "clase_predicha_nombre": clase_predicha,
+                "capa_analizada": last_conv_layer_name,
+                "plot_path": path,
+                "mensaje_para_agente": "Se generó exitosamente el mapa de calor Grad-CAM. Las zonas rojas y amarillas de la imagen generada indican las regiones donde la red neuronal prestó mayor atención para clasificar esta imagen."
+            }
+
+            return json.dumps(result)
+
+        except Exception as e:
+            return json.dumps({"error": f"No se pudo calcular la explicación Grad-CAM: {str(e)}"})
+        
+    def tool_occlusion_sensitivity_explain(self, instance_data: dict) -> str:
+        """
+        Explica la predicción tapando iterativamente partes de la imagen (oclusión) 
+        para ver qué regiones hacen que la confianza del modelo caiga más al desaparecer.
+        """
+        try:
+            # 1. PROCESAR RUTA
+            file_path = str(instance_data.get("filepath", instance_data.get("image_path", "")))
+            if 'filepath=' in file_path:
+                file_path = file_path.split('filepath=')[1]
+            file_path = urllib.parse.unquote(file_path)
+            
+            if not file_path or not os.path.exists(file_path):
+                return json.dumps({"error": f"Ruta inválida: {file_path}"})
+
+            # 2. CARGAR IMAGEN
+            img_size = (128, 128)
+            if hasattr(self, "dataset_metadata") and self.dataset_metadata:
+                img_size = self.dataset_metadata.get("image_size", (128, 128))
+
+            img = Image.open(file_path).convert("RGB").resize(img_size)
+            img_array = np.array(img, dtype=np.float32)
+            img_array = img_array / 255.0 
+
+            # 3. PREDICCIÓN BASE
+            predict_fn = self._get_lime_predict_fn()
+            base_preds = predict_fn(np.array([img_array]))
+            top_class_idx = np.argmax(base_preds[0])
+            base_confidence = base_preds[0][top_class_idx]
+
+            # 4. PARÁMETROS DE OCLUSIÓN
+            patch_size = max(img_size[0] // 8, 8) # Parche dinámico según el tamaño de la imagen
+            stride = patch_size // 2
+            heatmap = np.zeros((img_size[0], img_size[1]), dtype=np.float32)
+
+            # 5. GENERAR BATCH DE OCLUSIONES (Optimizado para no predecir 1 a 1)
+            occluded_images = []
+            positions = []
+            
+            for y in range(0, img_size[0], stride):
+                for x in range(0, img_size[1], stride):
+                    y_end = min(y + patch_size, img_size[0])
+                    x_end = min(x + patch_size, img_size[1])
+                    
+                    occ_img = img_array.copy()
+                    occ_img[y:y_end, x:x_end, :] = 127.5 # Color gris neutro
+                    
+                    occluded_images.append(occ_img)
+                    positions.append((y, y_end, x, x_end))
+
+            # 6. INFERENCIA EN LOTE
+            occ_preds = predict_fn(np.array(occluded_images))
+            
+            # 7. CALCULAR CAÍDAS DE CONFIANZA
+            for i, (y, y_end, x, x_end) in enumerate(positions):
+                drop = base_confidence - occ_preds[i][top_class_idx]
+                # Acumulamos el drop en la región (usamos max para resaltar el peor caso)
+                heatmap[y:y_end, x:x_end] = np.maximum(heatmap[y:y_end, x:x_end], drop)
+
+            # Normalizar heatmap
+            heatmap = np.maximum(heatmap, 0)
+            if np.max(heatmap) > 0:
+                heatmap /= np.max(heatmap)
+
+            clase_predicha = str(top_class_idx)
+            if hasattr(self, "dataset_metadata") and self.dataset_metadata:
+                classes = self.dataset_metadata.get("classes", [])
+                if top_class_idx < len(classes):
+                    clase_predicha = classes[top_class_idx]
+
+            # 8. RENDERIZAR GRÁFICO
+            try:
+                fig, ax = plt.subplots(figsize=(6, 6))
+                ax.imshow(img_array.astype('uint8'))
+                extent = [0, img_size[0], img_size[1], 0]
+                ax.imshow(heatmap, cmap='magma', alpha=0.6, extent=extent)
+                ax.axis("off")
+                ax.set_title(f"Sensibilidad por Oclusión: {clase_predicha}")
+
+                path = os.path.join(self.plots_dir, f"occlusion_{uuid.uuid4().hex[:8]}.png")
+                fig.savefig(path, bbox_inches="tight")
+                plt.close(fig)
+            except Exception as plot_err:
+                return json.dumps({"error": f"Error al renderizar: {str(plot_err)}"})
+
+            return json.dumps({
+                "tipo_xai": "Occlusion Sensitivity",
+                "clase_predicha": clase_predicha,
+                "confianza_base": round(float(base_confidence), 4),
+                "plot_path": path,
+                "mensaje_para_agente": "El mapa de calor 'magma' muestra qué zonas hicieron que el modelo dudara más cuando fueron tapadas. Las zonas más brillantes son las características clave que el modelo busca."
+            })
+
+        except Exception as e:
+            return json.dumps({"error": f"Fallo en Occlusion Sensitivity: {str(e)}"})
+    
+    def tool_integrated_gradients_explain(self, instance_data: dict) -> str:
+        """
+        Utiliza Integrated Gradients para asignar una puntuación de importancia 
+        a cada píxel individual, calculando cómo el píxel contribuyó a pasar 
+        de una imagen negra a la predicción final.
+        """
+        try:
+            import os
+            import json
+            import uuid
+            import urllib.parse
+            import numpy as np
+            import matplotlib.pyplot as plt
+            from PIL import Image
+            import tensorflow as tf
+
+            file_path = str(instance_data.get("filepath", instance_data.get("image_path", "")))
+            if 'filepath=' in file_path:
+                file_path = file_path.split('filepath=')[1]
+            file_path = urllib.parse.unquote(file_path)
+            if not os.path.exists(file_path): return json.dumps({"error": "Ruta inválida"})
+
+            img_size = getattr(self, "dataset_metadata", {}).get("image_size", (128, 128))
+            img_array = np.array(Image.open(file_path).convert("RGB").resize(img_size), dtype=np.float32)
+            
+            img_array = img_array / 255.0
+
+            # 1. PARÁMETROS IG
+            baseline = np.zeros_like(img_array) # Imagen completamente negra
+            m_steps = 50
+            alphas = tf.linspace(start=0.0, stop=1.0, num=m_steps)
+
+            # 2. INTERPOLACIÓN DE IMÁGENES
+            interpolated_images = tf.convert_to_tensor(
+                [baseline + alpha * (img_array - baseline) for alpha in alphas], 
+                dtype=tf.float32
+            )
+
+            # 3. CÁLCULO DE GRADIENTES ACUMULADOS
+            with tf.GradientTape() as tape:
+                tape.watch(interpolated_images)
+                preds = self.model(interpolated_images)
+                top_class_idx = tf.argmax(preds[-1]) # Clase de la imagen 100% original
+                loss = preds[:, top_class_idx]
+
+            grads = tape.gradient(loss, interpolated_images)
+            avg_grads = tf.reduce_mean(grads, axis=0)
+            
+            # 4. FÓRMULA DE INTEGRATED GRADIENTS: (imagen - base) * gradientes_promedio
+            integrated_grads = (img_array - baseline) * avg_grads.numpy()
+            
+            # Procesar para visualización (tomar el máximo absoluto por canal de color)
+            ig_heatmap = np.max(np.abs(integrated_grads), axis=-1)
+            ig_heatmap = ig_heatmap / np.max(ig_heatmap) # Normalizar
+
+            clase_predicha = str(int(top_class_idx.numpy()))
+            if hasattr(self, "dataset_metadata"):
+                classes = self.dataset_metadata.get("classes", [])
+                if top_class_idx < len(classes): clase_predicha = classes[top_class_idx]
+
+            # 5. RENDERIZADO
+            try:
+                fig, ax = plt.subplots(figsize=(6, 6))
+                # Mostramos la imagen en blanco y negro de fondo
+                ax.imshow(np.mean(img_array, axis=-1), cmap='gray', alpha=0.5)
+                # Superponemos los píxeles importantes en verde brillante
+                ax.imshow(ig_heatmap, cmap='Greens', alpha=0.7, vmin=0, vmax=1)
+                ax.axis("off")
+                ax.set_title(f"Integrated Gradients: {clase_predicha}")
+
+                path = os.path.join(self.plots_dir, f"ig_{uuid.uuid4().hex[:8]}.png")
+                fig.savefig(path, bbox_inches="tight", facecolor='black')
+                plt.close(fig)
+            except Exception as e:
+                return json.dumps({"error": f"Error gráfico: {str(e)}"})
+
+            return json.dumps({
+                "tipo_xai": "Integrated Gradients",
+                "clase_predicha": clase_predicha,
+                "plot_path": path,
+                "mensaje_para_agente": "A diferencia de mapas de calor amplios, este gráfico pinta de verde píxeles individuales muy específicos. Indica los contornos y texturas exactas que empujaron matemáticamente al modelo hacia esta decisión."
+            })
+
+        except Exception as e:
+            return json.dumps({"error": f"Fallo IG: {str(e)}"})
+        
+    def tool_saliency_map_explain(self, instance_data: dict) -> str:
+        """
+        Calcula un mapa de Saliencia (Gradientes Vanilla) para mostrar qué píxeles 
+        son los más sensibles. Un pequeño cambio en las zonas blancas provocaría 
+        un cambio gigante en la predicción.
+        """
+        try:
+            import os
+            import json
+            import uuid
+            import urllib.parse
+            import numpy as np
+            import matplotlib.pyplot as plt
+            from PIL import Image
+            import tensorflow as tf
+
+            file_path = str(instance_data.get("filepath", instance_data.get("image_path", "")))
+            if 'filepath=' in file_path:
+                file_path = file_path.split('filepath=')[1]
+            file_path = urllib.parse.unquote(file_path)
+            if not os.path.exists(file_path): return json.dumps({"error": "Ruta inválida"})
+
+            img_size = getattr(self, "dataset_metadata", {}).get("image_size", (128, 128))
+            img_array = np.array(Image.open(file_path).convert("RGB").resize(img_size), dtype=np.float32)
+            img_array = img_array / 255.0
+
+            img_tensor = tf.convert_to_tensor(np.expand_dims(img_array, axis=0))
+
+            # 1. CÁLCULO DEL GRADIENTE DIRECTO
+            with tf.GradientTape() as tape:
+                tape.watch(img_tensor)
+                preds = self.model(img_tensor)
+                top_class_idx = tf.argmax(preds[0])
+                loss = preds[0, top_class_idx]
+
+            grads = tape.gradient(loss, img_tensor)
+            
+            # 2. PROCESAMIENTO DEL MAPA
+            # Tomamos el valor absoluto máximo a través de los canales de color (RGB)
+            saliency = tf.reduce_max(tf.abs(grads), axis=-1)[0]
+            saliency = saliency.numpy()
+            
+            # Aplicar un poco de contraste (percentiles) para limpiar ruido visual común en Vanilla Gradients
+            p99 = np.percentile(saliency, 99)
+            saliency = np.clip(saliency, 0, p99)
+            saliency = saliency / np.max(saliency)
+
+            clase_predicha = str(int(top_class_idx.numpy()))
+            if hasattr(self, "dataset_metadata"):
+                classes = self.dataset_metadata.get("classes", [])
+                if top_class_idx < len(classes): clase_predicha = classes[top_class_idx]
+
+            # 3. RENDERIZADO (Estilo Rayos X)
+            try:
+                fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+                
+                # Subplot 1: Original
+                ax[0].imshow(img_array.astype('uint8'))
+                ax[0].axis("off")
+                ax[0].set_title("Original")
+
+                # Subplot 2: Mapa de Saliencia
+                ax[1].imshow(saliency, cmap='hot')
+                ax[1].axis("off")
+                ax[1].set_title(f"Mapa de Saliencia: {clase_predicha}")
+
+                path = os.path.join(self.plots_dir, f"saliency_{uuid.uuid4().hex[:8]}.png")
+                fig.savefig(path, bbox_inches="tight", facecolor='black')
+                plt.close(fig)
+            except Exception as e:
+                return json.dumps({"error": f"Error gráfico: {str(e)}"})
+
+            return json.dumps({
+                "tipo_xai": "Saliency Map",
+                "clase_predicha": clase_predicha,
+                "plot_path": path,
+                "mensaje_para_agente": "Se ha generado un mapa de saliencia térmico ('hot' colormap). Este mapa muestra la sensibilidad pura: los píxeles iluminados son aquellos que, si se modifican mínimamente, harían cambiar drásticamente la opinión del modelo."
+            })
+
+        except Exception as e:
+            return json.dumps({"error": f"Fallo en Saliency Map: {str(e)}"})
