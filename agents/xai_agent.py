@@ -14,6 +14,36 @@ class InstanceMemory:
     def __init__(self):
         self.last_instance = None
 
+class FallbackToolkit:
+    def tool_greetings(self, user_message: str = "") -> str:
+        """
+        Devuelve un mensaje de saludo amigable y explica la función del agente.
+        """
+        answer = {"result": (
+            "¡Hola! Soy tu asistente experto en Inteligencia Artificial Explicable (XAI). "
+            "Mi propósito es ayudarte a entender cómo funciona nuestro modelo de Machine Learning, "
+            "analizar los datos y explicarte por qué se toman ciertas predicciones, ya sea a nivel "
+            "general o para casos concretos. ¿En qué te puedo ayudar hoy?"
+        )}
+        return json.dumps(answer, ensure_ascii=False)
+
+    def tool_out_of_scope(self, user_message: str = "") -> str:
+        """
+        Maneja preguntas fuera del dominio de la aplicación (fuera de XAI/ML).
+        """
+        answer = {"result": ("Mis disculpas, pero soy un asistente diseñado exclusivamente para tareas de "
+            "Inteligencia Artificial Explicable (XAI) y análisis de modelos. No estoy capacitado "
+            "para conversar o responder preguntas sobre otros temas ajenos a este dominio.\n\n"
+            "Sin embargo, estaré encantado de ayudarte con tu modelo. Aquí tienes algunos ejemplos "
+            "de lo que puedes preguntarme:\n"
+            "- ¿Cuáles son las variables más importantes que usa el modelo?\n"
+            "- ¿Por qué el modelo ha tomado esta decisión para este cliente/imagen?\n"
+            "- ¿Qué tendría que cambiar en los datos para que la predicción cambie?\n"
+            "- ¿Cuáles son los perfiles más representativos de este dataset?"
+        )}
+        return json.dumps(answer, ensure_ascii=False)
+            
+
 class XAIInstanceCaptureCallback(BaseCallbackHandler):
     def __init__(self, memory):
         self.memory = memory
@@ -69,7 +99,28 @@ def get_agent_tools(toolkit, dataset_type: str):
     Devuelve la lista de herramientas exclusivas y permitidas 
     según la naturaleza del dataset (tabular o imagen).
     """
-    
+    tool_fallback = FallbackToolkit()
+    tool_greetings = StructuredTool.from_function(
+        func=tool_fallback.tool_greetings,
+        name="responder_saludo",
+        description=(
+            "Útil para responder a saludos, presentaciones, despedidas o expresiones de cortesía "
+            "del usuario (ej: 'hola', 'buenos días', 'gracias', '¿qué sabes hacer?')."
+        ),
+        return_direct=True
+    )
+
+    tool_out_of_scope = StructuredTool.from_function(
+        func=tool_fallback.tool_out_of_scope,
+        name="fuera_de_dominio",
+        description=(
+            "Útil cuando el usuario hace una pregunta que NO está relacionada con "
+            "el modelo de Machine Learning, el dataset, la inteligencia artificial o la explicación "
+            "de predicciones. Úsalo como salvavidas si la pregunta del usuario no tiene nada que ver con tu propósito."
+        ),
+        return_direct=True
+    )
+
     tool_global = StructuredTool.from_function(
         func=toolkit.tool_shap_explain_global,
         name="explicar_modelo_global",
@@ -99,7 +150,7 @@ def get_agent_tools(toolkit, dataset_type: str):
             return_direct=True
         )
         
-        return [tool_global, tool_local, tool_cf, tool_proto]
+        return [tool_greetings, tool_out_of_scope, tool_global, tool_local, tool_cf, tool_proto]
 
     elif dataset_type == "image":
         tool_gradcam = StructuredTool.from_function(
@@ -138,7 +189,7 @@ def get_agent_tools(toolkit, dataset_type: str):
             return_direct=True
         )
 
-        return [tool_global, tool_gradcam, tool_saliency, tool_ig, tool_occlusion, tool_lime_image]
+        return [tool_greetings, tool_out_of_scope, tool_global, tool_gradcam, tool_saliency, tool_ig, tool_occlusion, tool_lime_image]
 
     else:
         raise ValueError(f"dataset_type no soportado: {dataset_type}. Usa 'tabular' o 'image'.")
