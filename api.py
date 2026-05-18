@@ -118,7 +118,6 @@ def _run_full_pipeline(session_id: str, dataset_path: str, target: str, is_image
         _update_session(session_id, progress=0.95, message="Configurando agente XAI…")
         agent_executor = setup_xai_agent(metadata, model_info, toolkit, get_history)
 
-        # Generar dataset aumentado SÓLO si es tabular
         if not is_image:
             df_clean = df_raw
             _update_session(session_id, progress=0.98, message="Generando predicciones para el explorador...")
